@@ -17,8 +17,8 @@
 | Course | OOAD (OOP), 2nd year, university team project |
 | Team | Liubomyr Voskalo, Anna Kravchenko, Anton Vertyporoh |
 | **Deadline** | **Thursday 19 November 2026 (Module 11)**: live demo + submission |
-| Current phase | Day 1: setup. Only `README.md` and `AGENTS.md` exist so far |
-| Tech stack | **TBD.** Record it in §5 as soon as it is chosen |
+| Current phase | Day 1: backend in progress on branch `liubomyr/backend`; frontend and infra not started |
+| Tech stack | Backend: Python/FastAPI + SQLAlchemy (see §5). Frontend and hosting: TBD |
 | Live demo URL | TBD (must be HTTPS) |
 | Repo URL | TBD |
 
@@ -134,14 +134,15 @@ Update the Status column above when a criterion is met.
 
 ## 5. Tech stack
 
-**Status: TBD.** Whoever decides fills this in and logs the decision in §10.
+Backend chosen 2026-11-16 (Liubomyr). Frontend and hosting are still open.
 
 | Layer | Choice | Notes |
 |---|---|---|
-| Backend language/framework | TBD | |
-| Database | TBD | |
-| Auth method | TBD | e.g. sessions vs JWT; passwords must be hashed |
-| Frontend framework | TBD | |
+| Backend language/framework | **Python 3.12+ / FastAPI** | `backend/`, entry point `app.main:app` (uvicorn) |
+| ORM / Database | **SQLAlchemy 2.0**: SQLite locally, **Postgres** in prod | set via `DATABASE_URL`; tables are auto-created on startup (no migrations yet) |
+| Auth method | **JWT bearer tokens** (PyJWT, HS256) | passwords hashed with PBKDF2-SHA256 (stdlib) |
+| Tests | **pytest** + FastAPI `TestClient` | `cd backend && .venv/bin/pytest` |
+| Frontend framework | TBD (Anna) | consumes §8 |
 | Hosting (backend) | TBD | must be HTTPS |
 | Hosting (frontend) | TBD | must be HTTPS |
 | CI | TBD | |
@@ -156,7 +157,20 @@ Current state (update on every structural change):
 PidKlyuch/
 ├── AGENTS.md      # this file: shared AI context + work log (read first, update last)
 ├── CLAUDE.md      # pointer so Claude Code auto-loads AGENTS.md
-└── README.md      # public description, team division of work, run & deploy instructions
+├── README.md      # public description, team division of work, run & deploy instructions
+└── backend/                     # FastAPI service (owner: Liubomyr)
+    ├── requirements.txt         # runtime deps (pinned)
+    ├── requirements-dev.txt     # + pytest
+    ├── .env.example             # documented env vars (copy to .env)
+    ├── app/
+    │   ├── main.py              # create_app(): CORS, routers, DB init on startup
+    │   ├── core/config.py       # Settings (pydantic-settings, reads env/.env)
+    │   ├── core/database.py     # engine, SessionLocal, Base, get_db(), init_db()
+    │   ├── api/health.py        # GET /api/health
+    │   ├── models/              # SQLAlchemy ORM models
+    │   ├── services/            # business services (auth, rates, history)
+    │   └── customs/             # customs calculation engine (pure Python, no DB/HTTP)
+    └── tests/                   # pytest; conftest.py sets a test SQLite DB + fresh tables per test
 ```
 
 Planned (required by grading):
@@ -175,14 +189,92 @@ PidKlyuch/
 
 ## 7. Environment variables
 
-None yet. Format: `NAME`: where it is used, example value (never a real secret), required or optional.
+Format: `NAME`: where it is used, example value (never a real secret), required or optional.
+Backend vars are documented in `backend/.env.example`, read by `backend/app/core/config.py`.
+
+- `DATABASE_URL`: backend. `sqlite:///./pidklyuch.db` (default) or `postgresql+psycopg://user:pass@host:5432/db`. Optional locally, **required in prod**.
+- `JWT_SECRET`: backend, signs auth tokens. **Required in prod** (the default is insecure).
+- `JWT_EXPIRE_MINUTES`: backend, token lifetime, default `10080` (7 days). Optional.
+- `CORS_ORIGINS`: backend, comma-separated frontend origins, e.g. `https://pidklyuch.example.com`. **Required in prod.**
+- `NBU_API_URL`: backend, NBU exchange-rate endpoint. Optional (has a default).
+- `PASSWORD_HASH_ITERATIONS`: backend, PBKDF2 iterations, default `390000`. Only lowered in tests.
 
 ---
 
 ## 8. API contract (backend ↔ frontend)
 
-Not defined yet. Liubomyr's first task is to write the endpoint list here so Anna can build against mocks.
-For each endpoint: method, path, auth required?, request body, response body, error codes.
+Owner: Liubomyr. Base path: `/api`. JSON everywhere. Interactive docs: `GET /docs` (Swagger) on the running backend.
+Auth: send `Authorization: Bearer <access_token>` (the token comes from sign-up/sign-in). Errors use the FastAPI
+format: `{"detail": "..."}` (422 validation errors put a list in `detail`).
+Money in responses is a **string with 2 decimals** (e.g. `"16.00"`), so no float rounding happens in JS.
+
+| Status | Method | Path | Auth | Purpose |
+|---|---|---|---|---|
+| ✅ | GET | `/api/health` | – | liveness check for deploy |
+| ⬜ | POST | `/api/auth/signup` | – | create account → token |
+| ⬜ | POST | `/api/auth/signin` | – | sign in → token |
+| ⬜ | GET | `/api/auth/me` | required | current user |
+| ⬜ | POST | `/api/calculate` | optional | calculate landed price; saved to history if signed in |
+| ⬜ | POST | `/api/calculate/compare-rules` | – | parcel: current rules vs July 2027 rules |
+| ⬜ | GET | `/api/rates` | – | NBU rates used for conversion |
+| ⬜ | GET | `/api/history` | required | user's saved calculations, newest first |
+| ⬜ | DELETE | `/api/history/{id}` | required | delete one saved calculation |
+| ⬜ | GET | `/api/stats` | – | aggregate counters for the report |
+
+**Sign-out** is client-side: delete the stored token (JWT is stateless).
+
+**POST /api/auth/signup**: body `{"email": "a@b.com", "password": "min 8 chars", "name": "Anna"}` (`name` optional)
+→ `201 {"access_token": "...", "token_type": "bearer", "user": {"id": 1, "email": "a@b.com", "name": "Anna", "created_at": "ISO"}}`.
+`409` if the email is already registered.
+
+**POST /api/auth/signin**: body `{"email", "password"}` → `200`, same shape as signup. `401` on wrong credentials.
+
+**GET /api/auth/me** → `{"id", "email", "name", "created_at"}`. `401` if the token is missing, invalid, or expired.
+
+**POST /api/calculate**: body is either a parcel or a car (discriminated by `delivery_type`):
+```json
+{"delivery_type": "parcel", "category": "electronics", "item_price": 200, "shipping_price": 15,
+ "currency": "EUR", "rules": "current"}
+```
+- `category`: `electronics | clothing | cosmetics | toys | other`
+- `currency`: `EUR | USD | UAH | GBP | PLN`
+- `rules`: `current | july_2027` (default `current`)
+```json
+{"delivery_type": "car", "car_price": 10000, "shipping_price": 1200, "currency": "EUR",
+ "engine_type": "petrol", "engine_volume_cc": 2000, "battery_kwh": null,
+ "manufacture_year": 2014, "origin": "eu"}
+```
+- `engine_type`: `petrol | diesel | hybrid | electric` (`engine_volume_cc` is required for petrol, diesel, and
+  hybrid; `battery_kwh` is required for electric)
+- `origin`: `eu | other` (EU-origin cars have a different duty rate)
+
+Response `200`:
+```json
+{"delivery_type": "parcel", "rules": "current", "input_currency": "EUR",
+ "rate_date": "2026-11-16", "eur_uah": "48.1234",
+ "goods_value_eur": "200.00", "shipping_eur": "15.00",
+ "lines": [
+   {"code": "duty", "label": "Мито", "amount_eur": "5.00", "amount_uah": "240.62",
+    "formula": "10% × (200.00 − 150.00) = 5.00 EUR"},
+   {"code": "vat", "label": "ПДВ", "amount_eur": "11.00", "amount_uah": "529.36",
+    "formula": "20% × (50.00 + 5.00) = 11.00 EUR"}
+ ],
+ "taxes_total_eur": "16.00", "taxes_total_uah": "769.97",
+ "landed_total_eur": "231.00", "landed_total_uah": "11116.51",
+ "notes": ["..."], "calculation_id": 42}
+```
+`line.code` ∈ `duty | excise | vat`. `calculation_id` is `null` when the caller is not signed in.
+
+**POST /api/calculate/compare-rules**: same parcel body (`rules` is ignored) → `{"current": <result>, "july_2027": <result>}`.
+
+**GET /api/rates** → `{"date": "2026-11-16", "source": "nbu" | "fallback", "uah_per_unit": {"EUR": "48.12", "USD": "41.50", ...}}`
+
+**GET /api/history** → `[{"id", "created_at", "delivery_type", "input": {...request body...}, "result": {...response...}}]`
+
+**DELETE /api/history/{id}** → `204`. `404` if the item doesn't exist or isn't yours.
+
+**GET /api/stats** → `{"users": 12, "calculations": 80, "calculations_by_signed_in": 40, "returning_users": 5}`
+(`returning_users` = users who made calculations on 2 or more different days; used for the report)
 
 ---
 
@@ -207,15 +299,22 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - 2026-11-16: `AGENTS.md` is the single shared AI context file. `CLAUDE.md` only imports it. Reason: the team uses
   different AI agents. Most of them (Codex, Cursor, Copilot, Gemini CLI via config) read `AGENTS.md`, and Claude Code
   reads `CLAUDE.md`. (Liubomyr + Claude Code)
+- 2026-11-16: Backend = Python/FastAPI + SQLAlchemy. Reason: fastest path to a working, tested API in 3 days.
+  Auto-generated `/docs` lets Anna explore the API, and SQLAlchemy lets the same code run on SQLite locally and
+  Postgres in prod. (Liubomyr + Claude Code)
+- 2026-11-16: Money in API responses is a string with 2 decimals, and internally it is `decimal.Decimal`. Reason: avoid
+  float rounding errors in tax math. (Liubomyr + Claude Code)
+- 2026-11-16: Work happens on branch `liubomyr/backend`; it gets merged into `main` when the backend MVP is ready. (Liubomyr)
 
 ---
 
 ## 11. Open issues / TODO
 
-- [ ] Choose the tech stack and fill in §5 (all, Mon 16 Nov).
-- [ ] Create `backend/`, `frontend/`, `infra/` skeletons (each owner).
-- [ ] Deploy a "hello world" over HTTPS on day 1 to find hosting problems early (Anton).
-- [ ] Write the API contract in §8 (Liubomyr).
+- [x] Backend stack chosen (§5). [ ] Frontend stack and hosting still open (Anna, Anton).
+- [x] `backend/` skeleton. [ ] `frontend/`, `infra/` skeletons (Anna, Anton).
+- [ ] Deploy a "hello world" over HTTPS on day 1 to find hosting problems early (Anton). The backend already has `GET /api/health`.
+- [x] Write the API contract in §8 (Liubomyr).
+- [ ] Implement the backend endpoints marked ⬜ in §8 (Liubomyr).
 - [ ] Write `docs/customs-rules.md` with verified rules, sources, and test cases (Anton).
 - [ ] Fill in "How to run" and "How to deploy" in `README.md` (Anton, with input from both other owners).
 
@@ -247,6 +346,21 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **Decisions & why:** see §10, first entry.
 - **How to verify / run:** n/a (docs only)
 - **Not done / known problems / next steps:** tech stack not chosen; no code yet; see §11.
+
+### 2026-11-16: Backend scaffold + API contract
+- **Who:** Liubomyr Voskalo via Claude Code (Opus 5.5)
+- **Area:** backend
+- **What was done:** Created the FastAPI project in `backend/` on branch `liubomyr/backend`: settings from env,
+  SQLAlchemy engine/session/Base, `init_db()` on startup, CORS, `GET /api/health`, and a pytest setup with a
+  `client` fixture (fresh SQLite tables per test). Wrote the full API contract in §8 (all endpoints planned for the
+  backend MVP) so the frontend can start now.
+- **Files touched:** created `backend/requirements.txt`, `backend/requirements-dev.txt`, `backend/.env.example`,
+  `backend/.gitignore`, `backend/app/{main.py,core/config.py,core/database.py,api/health.py}`, empty package
+  `__init__.py` files, `backend/tests/{conftest.py,test_health.py}`. Modified `AGENTS.md` (§5–§8, §10–§12).
+- **Decisions & why:** see §10 (FastAPI/SQLAlchemy, Decimal-as-string money, branch).
+- **How to verify / run:** `cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt && .venv/bin/pytest`;
+  run with `.venv/bin/uvicorn app.main:app --reload`, then open http://localhost:8000/docs
+- **Not done / known problems / next steps:** auth, calculation engine, NBU rates, history, stats (§8 ⬜).
 
 ---
 
