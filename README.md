@@ -45,7 +45,7 @@ and the report PDF.
 - Apply the UX fixes from user feedback on Wednesday.
 
 ### 👤 Anton Vertyporoh: Infra, Customs Rules, User Testing & Report  (`infra/`, `docs/`)
-- **Infra:** Dockerfiles / compose, hosting, domain, and **HTTPS**. Deploy a "hello world" on **day 1**, then
+- **Infra (AWS):** pick the AWS services for the backend (container from `backend/Dockerfile`), RDS Postgres, frontend hosting, and **HTTPS**. Put the setup in `infra/`. Deploy a "hello world" on **day 1**, then redeploy as features land. Optional CI (e.g. GitHub Actions → ECR) that runs the backend tests.
   redeploy as features land. Optional CI that runs the backend tests.
 - **Customs rules research:** write `docs/customs-rules.md` with the exact current rules for parcels and cars, the
   July 2027 parcel rules, and official sources. Include **10+ worked test cases** (input → expected output) that
@@ -112,13 +112,13 @@ _TBD (Anna)._
 
 ## How to deploy
 
-_TBD (Anton): hosting provider, how HTTPS is set up, deploy commands._
+Everything is hosted on **AWS**: the backend container, **RDS PostgreSQL**, and the frontend with HTTPS. _TBD (Anton): the exact services, how HTTPS is set up, and deploy commands (see `infra/`)._
 
 The backend is a single Docker image (`backend/Dockerfile`, listens on `$PORT`) and needs these environment
 variables in production:
 
 | Variable | Example |
 |---|---|
-| `DATABASE_URL` | `postgres://user:pass@host:5432/pidklyuch` (Postgres; `postgres://` URLs are accepted) |
-| `JWT_SECRET` | a long random string: `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
+| `DATABASE_URL` | `postgresql://user:pass@<rds-endpoint>:5432/pidklyuch?sslmode=require` (RDS Postgres; never SQLite on AWS) |
+| `JWT_SECRET` | store in Secrets Manager / SSM; a long random string: `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
 | `CORS_ORIGINS` | the HTTPS URL of the frontend, e.g. `https://pidklyuch.example.com` |

@@ -18,9 +18,9 @@
 | Team | Liubomyr Voskalo, Anna Kravchenko, Anton Vertyporoh |
 | **Deadline** | **Thursday 19 November 2026 (Module 11)**: live demo + submission |
 | Current phase | Day 1: **backend MVP done** on branch `liubomyr/backend` (all §8 endpoints ✅, 43 tests, not deployed yet); frontend and infra not started |
-| Tech stack | Backend: Python/FastAPI + SQLAlchemy (see §5). Frontend and hosting: TBD |
+| Tech stack | Backend: Python/FastAPI + SQLAlchemy. **Hosting: AWS (all parts).** Frontend: TBD (see §5) |
 | Live demo URL | TBD (must be HTTPS) |
-| Repo URL | TBD |
+| Repo URL | https://github.com/voskalo/PidKlyuch (`main` has only the docs; backend is on the local branch `liubomyr/backend`, **not pushed yet**) |
 
 ---
 
@@ -93,7 +93,7 @@ Full division of work is in `README.md` → "Team & division of work". Summary:
 |---|---|---|
 | **Liubomyr Voskalo** | Backend: API, database, auth (sign-up/sign-in), calculation engine implementation, NBU rates, history | `backend/` |
 | **Anna Kravchenko** | Frontend: all UI, calculator flow, breakdown view, auth pages, history page, donation button | `frontend/` |
-| **Anton Vertyporoh** | Infra and deploy (HTTPS), customs-rules research and test cases, user testing coordination, final report | `infra/`, `docs/` |
+| **Anton Vertyporoh** | Infra and deploy on **AWS** (HTTPS), customs-rules research and test cases, user testing coordination, final report | `infra/`, `docs/` |
 
 The interfaces between members are the **API contract (§8)**, owned by Liubomyr and consumed by Anna, and the
 **customs rules spec + test cases (§13 and `docs/customs-rules.md`)**, owned by Anton and implemented by Liubomyr.
@@ -134,7 +134,7 @@ Update the Status column above when a criterion is met.
 
 ## 5. Tech stack
 
-Backend chosen 2026-11-16 (Liubomyr). Frontend and hosting are still open.
+Backend chosen 2026-11-16 (Liubomyr). **Everything is hosted on AWS using AWS services** (team decision, 16.11). The specific AWS services are still to be chosen by Anton. Frontend framework is still open.
 
 | Layer | Choice | Notes |
 |---|---|---|
@@ -143,9 +143,27 @@ Backend chosen 2026-11-16 (Liubomyr). Frontend and hosting are still open.
 | Auth method | **JWT bearer tokens** (PyJWT, HS256) | passwords hashed with PBKDF2-SHA256 (stdlib) |
 | Tests | **pytest** + FastAPI `TestClient` | `cd backend && .venv/bin/pytest` |
 | Frontend framework | TBD (Anna) | consumes §8 |
-| Hosting (backend) | TBD | must be HTTPS |
-| Hosting (frontend) | TBD | must be HTTPS |
-| CI | TBD | |
+| Hosting (backend) | **AWS**: service TBD (Anton). Options: App Runner, ECS Fargate + ALB, Elastic Beanstalk (Docker) | runs `backend/Dockerfile`; health check `GET /api/health`; HTTPS required (ACM certificate or the service's built-in HTTPS) |
+| Database (prod) | **AWS RDS for PostgreSQL** | `DATABASE_URL=postgresql://user:pass@<rds-endpoint>:5432/pidklyuch?sslmode=require` |
+| Hosting (frontend) | **AWS**: service TBD (Anton/Anna). Options: S3 + CloudFront, or Amplify Hosting | HTTPS via CloudFront/ACM |
+| Secrets | **AWS Secrets Manager or SSM Parameter Store** → env vars | `JWT_SECRET`, DB password: never in git |
+| Logs | **CloudWatch Logs** | the backend logs to stdout (uvicorn + `logging`) |
+| Infra as code | TBD in `infra/` (CloudFormation / CDK / Terraform, or documented console steps) | graded: `infra/` must exist |
+| CI | TBD (e.g. GitHub Actions → ECR) | |
+
+**AWS implications for the backend (already handled or to keep in mind):**
+- **Do not use SQLite on AWS.** Container filesystems are ephemeral, so the data would be lost on every redeploy.
+  `DATABASE_URL` must point to RDS.
+- The container listens on `$PORT` (default 8000), and uvicorn runs with `--proxy-headers`, so it works behind
+  ALB/App Runner/CloudFront.
+- RDS: allow inbound 5432 only from the backend's security group/VPC connector. Add `?sslmode=require` to the URL.
+- Outbound internet access is required (NBU API `bank.gov.ua`). If the backend runs in private subnets, it needs a
+  NAT gateway / VPC egress. Without it, the app still works but uses the fallback rates (`rate_source: "fallback"`).
+- `CORS_ORIGINS` = the frontend's HTTPS URL (CloudFront/Amplify domain). Alternative: route `/api/*` through the same
+  CloudFront distribution to the backend, so the frontend and API share one origin and CORS is not needed.
+- The NBU rate cache is in memory per instance. That's fine with several instances (each one fetches on its own).
+- Tables are auto-created on startup (`init_db()`), so the first deploy against an empty RDS database needs no
+  manual SQL.
 
 ---
 
@@ -186,8 +204,22 @@ PidKlyuch/
     │       │                    #   → THE ONLY place with tax rates/thresholds; edit numbers here
     │       ├── models.py        # ParcelInput, CarInput, TaxLine, Breakdown (totals), money() rounding, enums
     │       └── calculators.py   # CustomsCalculator (ABC) → ParcelCalculator, CarCalculator (Strategy pattern)
-    └── tests/                   # pytest; conftest.py sets a test SQLite DB + fresh tables per test
+    └── tests/                   # pytest (43 tests). Run: cd backend && .venv/bin/pytest
+        ├── conftest.py          # sets test env (SQLite test.db, fast hashing), `client` fixture with fresh tables,
+        │                        #   overrides get_rates_service with FAKE_NBU (1 EUR = 50 UAH, 1 USD = 40 UAH)
+        ├── test_health.py       # /api/health
+        ├── test_auth.py         # hashing, signup/signin/me, duplicates, validation, bad tokens
+        ├── test_customs.py      # pure engine: pitch figures, thresholds, 2027 rules, excise, age coefficient
+        ├── test_rates.py        # NBU parsing, conversion, fallback, cache-on-failure, /api/rates
+        ├── test_calculate_api.py# /api/calculate (parcel, car, USD conversion, 422s), compare-rules
+        └── test_history.py      # history save/list/delete/privacy, /api/stats, normalize_db_url
 ```
+
+**Backend architecture (layers; each one only calls the layer below it):**
+`api/` (HTTP: routing, pydantic validation, auth dependencies) → `services/` (use cases: AuthService,
+CalculationService, RatesService, HistoryService) → `customs/` (pure domain logic, no I/O) and `models/` (ORM).
+Adding a new delivery type = a new `*Rules` dataclass in `rules.py`, a new `CustomsCalculator` subclass, a new `*In`
+schema added to the `CalculationIn` union, and a branch in `CalculationService._breakdown()`.
 
 Planned (required by grading):
 
@@ -239,6 +271,14 @@ Money in responses is a **string with 2 decimals** (e.g. `"16.00"`), so no float
 
 **Sign-out** is client-side: delete the stored token (JWT is stateless).
 
+**Notes for the frontend (Anna):**
+- Store the `access_token` (e.g. in `localStorage`) and send it on every request. `/api/calculate` works without
+  it too, but then nothing is saved to history.
+- On any `401`, clear the token and show sign-in.
+- CORS allows `http://localhost:5173` (Vite) and `http://localhost:3000` by default. For another origin, add it to
+  `CORS_ORIGINS` in `backend/.env`.
+- Start the backend locally (README → "How to run locally") and use http://localhost:8000/docs to try requests.
+
 **POST /api/auth/signup**: body `{"email": "a@b.com", "password": "min 8 chars", "name": "Anna"}` (`name` optional)
 → `201 {"access_token": "...", "token_type": "bearer", "user": {"id": 1, "email": "a@b.com", "name": "Anna", "created_at": "ISO"}}`.
 `409` if the email is already registered.
@@ -286,7 +326,7 @@ a car missing `engine_volume_cc` / `battery_kwh` contains the reason in `detail[
 
 **POST /api/calculate/compare-rules**: same parcel body (`rules` is ignored) → `{"current": <result>, "july_2027": <result>}`.
 
-**GET /api/rates** → `{"date": "2026-11-16", "source": "nbu" | "fallback", "uah_per_unit": {"EUR": "48.12", "USD": "41.50", ...}}`
+**GET /api/rates** → `{"date": "2026-11-16", "source": "nbu" | "fallback", "uah_per_unit": {"UAH": "1", "EUR": "50.222", "USD": "45.4274", "GBP": "60.106", "PLN": "11.3916"}}`
 
 **GET /api/history** → `[{"id", "created_at", "delivery_type", "input": {...request body...}, "result": {...response...}}]`
 (at most 100, newest first; numbers inside `input` come back as strings, e.g. `"item_price": "200"`)
@@ -334,6 +374,9 @@ Format: `YYYY-MM-DD: decision: reason (who)`
   (Liubomyr + Claude Code)
 - 2026-11-16: All calculations are persisted, including anonymous ones, to get real usage numbers for the report
   (`/api/stats`). "Returning user" = a user with calculations on 2 or more different UTC days. (Liubomyr + Claude Code)
+- 2026-11-16: **All hosting on AWS, using AWS services** (backend, database, frontend, secrets). Reason: team
+  decision. The concrete services (App Runner vs ECS vs Beanstalk, S3+CloudFront vs Amplify) are Anton's choice;
+  record them here and in §5 once chosen. (Liubomyr)
 - 2026-11-16: Work happens on branch `liubomyr/backend`; it gets merged into `main` when the backend MVP is ready. (Liubomyr)
 
 ---
@@ -342,16 +385,19 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 
 - [x] Backend stack chosen (§5). [ ] Frontend stack and hosting still open (Anna, Anton).
 - [x] `backend/` skeleton. [ ] `frontend/`, `infra/` skeletons (Anna, Anton).
-- [ ] Deploy a "hello world" over HTTPS on day 1 to find hosting problems early (Anton). The backend already has `GET /api/health`.
+- [ ] Deploy a "hello world" on AWS over HTTPS on day 1 to find hosting problems early (Anton). The backend already has `GET /api/health`.
 - [x] Write the API contract in §8 (Liubomyr).
 - [x] Implement the backend endpoints in §8 (Liubomyr).
 - [ ] Merge `liubomyr/backend` into `main` and push (Liubomyr).
-- [ ] Deploy the backend over HTTPS with Postgres. `backend/Dockerfile` is ready; set `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGINS` (Anton + Liubomyr).
+- [ ] Choose the AWS services (backend compute, frontend hosting, IaC tool) and fill in §5 (Anton).
+- [ ] Deploy the backend on AWS over HTTPS with RDS Postgres. `backend/Dockerfile` is ready (push the image to ECR); set `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGINS` from Secrets Manager/SSM (Anton + Liubomyr).
+- [ ] Put the AWS setup into `infra/` (IaC templates or step-by-step console instructions), since `infra/` is graded (Anton).
 - [ ] The Docker image build was not verified (no Docker daemon on Liubomyr's machine on 16.11). Run `docker build backend` once.
 - [ ] Replace the assumed customs rates with verified ones in `backend/app/customs/rules.py` and add Anton's test cases to `backend/tests/test_customs.py` (Anton → Liubomyr).
 - [ ] Optional: rate limiting on auth endpoints, password reset (not needed for the demo).
 - [ ] Write `docs/customs-rules.md` with verified rules, sources, and test cases (Anton).
-- [ ] Fill in "How to run" and "How to deploy" in `README.md` (Anton, with input from both other owners).
+- [x] README "How to run locally" → Backend, plus backend production env vars under "How to deploy" (Liubomyr).
+- [ ] README: the Frontend run section (Anna) and the actual deploy steps / hosting / HTTPS (Anton).
 
 ---
 
@@ -469,6 +515,34 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **Not done / known problems / next steps:** not deployed; Docker build not verified locally; no DB migrations
   (tables are auto-created, so a schema change on prod requires a manual ALTER or a fresh DB); customs rates
   are unverified. See §11.
+
+
+### 2026-11-16: AGENTS.md completeness pass
+- **Who:** Liubomyr Voskalo via Claude Code (Opus 5.5)
+- **Area:** docs
+- **What was done:** Checked this file against the actual repo and filled the gaps: repo URL + push status (§0),
+  the test files and what each covers, and the backend layer architecture + "how to add a delivery type" (§6),
+  real `/api/rates` example values and notes for the frontend: token handling, 401, CORS dev origins (§8),
+  and the stale README TODO (§11).
+- **Files touched:** modified `AGENTS.md`
+- **Decisions & why:** none
+- **How to verify / run:** n/a (docs only)
+- **Not done / known problems / next steps:** none new; see §11.
+
+
+### 2026-11-16: Hosting target set to AWS
+- **Who:** Liubomyr Voskalo via Claude Code (Opus 5.5)
+- **Area:** docs / infra planning
+- **What was done:** Recorded the team decision that everything is hosted on AWS using AWS services. Updated §5 with
+  the AWS service options (backend compute, RDS Postgres, frontend hosting, Secrets Manager/SSM, CloudWatch) and the
+  AWS-specific backend notes: no SQLite in prod, RDS SSL, outbound access for the NBU API, CORS vs. single
+  CloudFront origin. Also updated §0, §3, §10, and §11, and in `README.md`, Anton's role and the deploy section.
+  No code changes were needed: the Dockerfile already uses `$PORT` and proxy headers, and `postgres://` URLs are
+  accepted.
+- **Files touched:** modified `AGENTS.md`, `README.md`
+- **Decisions & why:** see §10 (AWS).
+- **How to verify / run:** n/a (docs only)
+- **Not done / known problems / next steps:** the concrete AWS services and `infra/` are still to be done (Anton).
 
 ---
 
