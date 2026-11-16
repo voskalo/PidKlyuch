@@ -17,7 +17,7 @@
 | Course | OOAD (OOP), 2nd year, university team project |
 | Team | Liubomyr Voskalo, Anna Kravchenko, Anton Vertyporoh |
 | **Deadline** | **Thursday 19 November 2026 (Module 11)**: live demo + submission |
-| Current phase | Day 1: setup. Only `README.md` and `AGENTS.md` exist so far |
+| Current phase | Day 1: setup & scaffolding. Infra and customs rules spec in progress on `anton/infra-and-docs` |
 | Tech stack | **TBD.** Record it in §5 as soon as it is chosen |
 | Live demo URL | TBD (must be HTTPS) |
 | Repo URL | TBD |
@@ -142,8 +142,8 @@ Update the Status column above when a criterion is met.
 | Database | TBD | |
 | Auth method | TBD | e.g. sessions vs JWT; passwords must be hashed |
 | Frontend framework | TBD | |
-| Hosting (backend) | TBD | must be HTTPS |
-| Hosting (frontend) | TBD | must be HTTPS |
+| Hosting (backend) | TBD | Docker Compose + Caddy v2 (automatic HTTPS) |
+| Hosting (frontend) | TBD | Docker Compose + Caddy v2 (automatic HTTPS) |
 | CI | TBD | |
 
 ---
@@ -154,6 +154,8 @@ Current state (update on every structural change):
 
 ```
 PidKlyuch/
+├── infra/
+│   └── README.md  # deployment architecture, prerequisites, run & HTTPS deploy instructions
 ├── AGENTS.md      # this file: shared AI context + work log (read first, update last)
 ├── CLAUDE.md      # pointer so Claude Code auto-loads AGENTS.md
 └── README.md      # public description, team division of work, run & deploy instructions
@@ -207,6 +209,7 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - 2026-11-16: `AGENTS.md` is the single shared AI context file. `CLAUDE.md` only imports it. Reason: the team uses
   different AI agents. Most of them (Codex, Cursor, Copilot, Gemini CLI via config) read `AGENTS.md`, and Claude Code
   reads `CLAUDE.md`. (Liubomyr + Claude Code)
+- 2026-11-16: Use Docker Compose + Caddy v2 for deployment and automatic HTTPS: Caddy provisions and renews Let's Encrypt TLS certificates automatically with minimal config, meeting the mandatory HTTPS grading requirement. (Anton + Antigravity CLI)
 
 ---
 
@@ -247,6 +250,15 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **Decisions & why:** see §10, first entry.
 - **How to verify / run:** n/a (docs only)
 - **Not done / known problems / next steps:** tech stack not chosen; no code yet; see §11.
+
+### 2026-11-16 13:33: Add infra directory skeleton and README
+- **Who:** Anton Vertyporokh via Antigravity CLI
+- **Area:** infra
+- **What was done:** Verified current git branch `anton/infra-and-docs`. Created `infra/README.md` documenting the Docker Compose + Caddy v2 reverse-proxy architecture for automatic HTTPS, Day 1 hello-world layout vs. Day 2+ `/api/*` and `/*` routing, prerequisites, `DOMAIN`/`ACME_EMAIL` env vars, local run commands, and production deploy instructions. Updated `AGENTS.md` §0, §5, §6, and §10.
+- **Files touched:** `infra/README.md` (created), `AGENTS.md` (modified)
+- **Decisions & why:** Chosen Docker Compose + Caddy v2 for automatic HTTPS provisioning (see §10).
+- **How to verify / run:** Read `infra/README.md`; compose stack will be added in Steps 2–3.
+- **Not done / known problems / next steps:** Still need `infra/hello-world/index.html`, `infra/Dockerfile`, `infra/Caddyfile`, `infra/docker-compose.yml`, and `docs/customs-rules.md`.
 
 ---
 
