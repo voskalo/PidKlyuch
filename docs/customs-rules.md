@@ -221,3 +221,125 @@ $$\text{Total Landed Price}_{\text{EUR}} = V_{\text{EUR}} + \text{Total Tax}_{\t
   - $\text{Excise} = 75 \times 2.0 \times 8 = 1200.00\text{ EUR}$
   - $\text{VAT} = 0.20 \times (10000 + 1000 + 1200) = 2440.00\text{ EUR}$
   - $\text{Total Tax} = \mathbf{4,640.00\text{ EUR}}$ ✔
+
+---
+
+## 5. Worked Test Cases (`TC-P1` – `TC-P5`, `TC-C1` – `TC-C5`)
+
+All 10 test cases below use a deterministic reference NBU rate fixture so unit tests can run offline with exact decimal equality:
+- `EUR = 45.00 UAH`
+- `USD = 41.40 UAH` (cross-rate: `1 USD = 0.92 EUR`)
+- `UAH = 1.00 UAH`
+- `current_year = 2026` (for car age calculation)
+
+### 5.1 Parcel Test Cases (Current Rules vs. July 2027 Rules)
+
+| ID | Description | Input (`item_price`, `shipping`, `currency`, `category`) | Current Rules (`duty`, `vat`, `total_tax`, `landed_eur`) | July 2027 Rules (`duty`, `vat`, `total_tax`, `landed_eur`) |
+|---|---|---|---|---|
+| **TC-P1** | Under €150 threshold | `120.00`, `15.00`, `EUR`, `electronics` | `0.00`, `0.00`, **`0.00`**, `135.00` (`6075.00 UAH`) | `0.00`, `24.00`, **`24.00`**, `159.00` (`7155.00 UAH`) |
+| **TC-P2** | Exact €150 boundary | `150.00`, `10.00`, `EUR`, `clothing` | `0.00`, `0.00`, **`0.00`**, `160.00` (`7200.00 UAH`) | `0.00`, `30.00`, **`30.00`**, `190.00` (`8550.00 UAH`) |
+| **TC-P3** | Pitch benchmark (€200) | `200.00`, `20.00`, `EUR`, `electronics` | `5.00`, `11.00`, **`16.00`**, `236.00` (`10620.00 UAH`) | `5.00`, `41.00`, **`46.00`**, `266.00` (`11970.00 UAH`) |
+| **TC-P4** | USD conversion (`$300` → `€276`) | `300.00`, `25.00`, `USD`, `clothing` | `12.60`, `27.72`, **`40.32`**, `339.32` (`15269.40 UAH`) | `12.60`, `57.72`, **`70.32`**, `369.32` (`16619.40 UAH`) |
+| **TC-P5** | High-value parcel (€1,000) | `1000.00`, `40.00`, `EUR`, `electronics` | `85.00`, `187.00`, **`272.00`**, `1312.00` (`59040.00 UAH`) | `85.00`, `217.00`, **`302.00`**, `1342.00` (`60390.00 UAH`) |
+
+### 5.2 Passenger Car Test Cases (`current_year = 2026`)
+
+| ID | Description | Input (`customs_value_eur`, `engine_type`, `volume_cm3` / `kwh`, `production_year`, `K_age`) | `duty_eur` | `excise_eur` | `vat_eur` | `total_tax_eur` (`total_tax_uah`) | `total_landed_eur` (`total_landed_uah`) |
+|---|---|---|---|---|---|---|---|
+| **TC-C1** | Pitch lower bound EV | `10000.00`, `electric`, `40 kWh`, `2022` (`3`) | `0.00` | `40.00` | `2008.00` | **`2048.00`** (`92160.00 UAH`) | `12048.00` (`542160.00 UAH`) |
+| **TC-C2** | Standard petrol (1.6L, $K_{\text{age}}=1$) | `10000.00`, `petrol`, `1600 cm³`, `2024` (`1`) | `1000.00` | `80.00` | `2216.00` | **`3296.00`** (`148320.00 UAH`) | `13296.00` (`598320.00 UAH`) |
+| **TC-C3** | Pitch upper bound diesel (2.0L, 8yo) | `10000.00`, `diesel`, `2000 cm³`, `2017` (`8`) | `1000.00` | `1200.00` | `2440.00` | **`4640.00`** (`208800.00 UAH`) | `14640.00` (`658800.00 UAH`) |
+| **TC-C4** | Large petrol (`>3000 cm³`, `R=100`) | `15000.00`, `petrol`, `3500 cm³`, `2020` (`5`) | `1500.00` | `1750.00` | `3650.00` | **`6900.00`** (`310500.00 UAH`) | `21900.00` (`985500.00 UAH`) |
+| **TC-C5** | Old large diesel (`>3500 cm³`, age cap 15) | `8000.00`, `diesel`, `4000 cm³`, `2007` (`18→15`) | `800.00` | `9000.00` | `3560.00` | **`13360.00`** (`601200.00 UAH`) | `21360.00` (`961200.00 UAH`) |
+
+### 5.3 Structured Fixture Data (JSON for Backend Unit Tests)
+
+```json
+{
+  "nbu_test_rates_uah": {
+    "EUR": "45.00",
+    "USD": "41.40",
+    "UAH": "1.00"
+  },
+  "current_year": 2026,
+  "parcel_cases": [
+    {
+      "id": "TC-P1",
+      "input": { "item_price": "120.00", "shipping_cost": "15.00", "currency": "EUR", "category": "electronics" },
+      "expected": {
+        "item_value_eur": "120.00",
+        "shipping_eur": "15.00",
+        "current_rules": { "excess_eur": "0.00", "duty_eur": "0.00", "vat_eur": "0.00", "total_tax_eur": "0.00", "total_tax_uah": "0.00", "total_landed_eur": "135.00", "total_landed_uah": "6075.00" },
+        "july_2027_rules": { "excess_eur": "0.00", "duty_eur": "0.00", "vat_eur": "24.00", "total_tax_eur": "24.00", "total_tax_uah": "1080.00", "total_landed_eur": "159.00", "total_landed_uah": "7155.00" }
+      }
+    },
+    {
+      "id": "TC-P2",
+      "input": { "item_price": "150.00", "shipping_cost": "10.00", "currency": "EUR", "category": "clothing" },
+      "expected": {
+        "item_value_eur": "150.00",
+        "shipping_eur": "10.00",
+        "current_rules": { "excess_eur": "0.00", "duty_eur": "0.00", "vat_eur": "0.00", "total_tax_eur": "0.00", "total_tax_uah": "0.00", "total_landed_eur": "160.00", "total_landed_uah": "7200.00" },
+        "july_2027_rules": { "excess_eur": "0.00", "duty_eur": "0.00", "vat_eur": "30.00", "total_tax_eur": "30.00", "total_tax_uah": "1350.00", "total_landed_eur": "190.00", "total_landed_uah": "8550.00" }
+      }
+    },
+    {
+      "id": "TC-P3",
+      "input": { "item_price": "200.00", "shipping_cost": "20.00", "currency": "EUR", "category": "electronics" },
+      "expected": {
+        "item_value_eur": "200.00",
+        "shipping_eur": "20.00",
+        "current_rules": { "excess_eur": "50.00", "duty_eur": "5.00", "vat_eur": "11.00", "total_tax_eur": "16.00", "total_tax_uah": "720.00", "total_landed_eur": "236.00", "total_landed_uah": "10620.00" },
+        "july_2027_rules": { "excess_eur": "50.00", "duty_eur": "5.00", "vat_eur": "41.00", "total_tax_eur": "46.00", "total_tax_uah": "2070.00", "total_landed_eur": "266.00", "total_landed_uah": "11970.00" }
+      }
+    },
+    {
+      "id": "TC-P4",
+      "input": { "item_price": "300.00", "shipping_cost": "25.00", "currency": "USD", "category": "clothing" },
+      "expected": {
+        "item_value_eur": "276.00",
+        "shipping_eur": "23.00",
+        "current_rules": { "excess_eur": "126.00", "duty_eur": "12.60", "vat_eur": "27.72", "total_tax_eur": "40.32", "total_tax_uah": "1814.40", "total_landed_eur": "339.32", "total_landed_uah": "15269.40" },
+        "july_2027_rules": { "excess_eur": "126.00", "duty_eur": "12.60", "vat_eur": "57.72", "total_tax_eur": "70.32", "total_tax_uah": "3164.40", "total_landed_eur": "369.32", "total_landed_uah": "16619.40" }
+      }
+    },
+    {
+      "id": "TC-P5",
+      "input": { "item_price": "1000.00", "shipping_cost": "40.00", "currency": "EUR", "category": "electronics" },
+      "expected": {
+        "item_value_eur": "1000.00",
+        "shipping_eur": "40.00",
+        "current_rules": { "excess_eur": "850.00", "duty_eur": "85.00", "vat_eur": "187.00", "total_tax_eur": "272.00", "total_tax_uah": "12240.00", "total_landed_eur": "1312.00", "total_landed_uah": "59040.00" },
+        "july_2027_rules": { "excess_eur": "850.00", "duty_eur": "85.00", "vat_eur": "217.00", "total_tax_eur": "302.00", "total_tax_uah": "13590.00", "total_landed_eur": "1342.00", "total_landed_uah": "60390.00" }
+      }
+    }
+  ],
+  "car_cases": [
+    {
+      "id": "TC-C1",
+      "input": { "customs_value": "10000.00", "currency": "EUR", "engine_type": "electric", "battery_capacity_kwh": "40", "production_year": 2022 },
+      "expected": { "k_age": 3, "duty_eur": "0.00", "excise_eur": "40.00", "vat_eur": "2008.00", "total_tax_eur": "2048.00", "total_tax_uah": "92160.00", "total_landed_eur": "12048.00", "total_landed_uah": "542160.00" }
+    },
+    {
+      "id": "TC-C2",
+      "input": { "customs_value": "10000.00", "currency": "EUR", "engine_type": "petrol", "engine_volume_cm3": 1600, "production_year": 2024 },
+      "expected": { "k_age": 1, "duty_eur": "1000.00", "excise_eur": "80.00", "vat_eur": "2216.00", "total_tax_eur": "3296.00", "total_tax_uah": "148320.00", "total_landed_eur": "13296.00", "total_landed_uah": "598320.00" }
+    },
+    {
+      "id": "TC-C3",
+      "input": { "customs_value": "10000.00", "currency": "EUR", "engine_type": "diesel", "engine_volume_cm3": 2000, "production_year": 2017 },
+      "expected": { "k_age": 8, "duty_eur": "1000.00", "excise_eur": "1200.00", "vat_eur": "2440.00", "total_tax_eur": "4640.00", "total_tax_uah": "208800.00", "total_landed_eur": "14640.00", "total_landed_uah": "658800.00" }
+    },
+    {
+      "id": "TC-C4",
+      "input": { "customs_value": "15000.00", "currency": "EUR", "engine_type": "petrol", "engine_volume_cm3": 3500, "production_year": 2020 },
+      "expected": { "k_age": 5, "duty_eur": "1500.00", "excise_eur": "1750.00", "vat_eur": "3650.00", "total_tax_eur": "6900.00", "total_tax_uah": "310500.00", "total_landed_eur": "21900.00", "total_landed_uah": "985500.00" }
+    },
+    {
+      "id": "TC-C5",
+      "input": { "customs_value": "8000.00", "currency": "EUR", "engine_type": "diesel", "engine_volume_cm3": 4000, "production_year": 2007 },
+      "expected": { "k_age": 15, "duty_eur": "800.00", "excise_eur": "9000.00", "vat_eur": "3560.00", "total_tax_eur": "13360.00", "total_tax_uah": "601200.00", "total_landed_eur": "21360.00", "total_landed_uah": "961200.00" }
+    }
+  ]
+}
+```

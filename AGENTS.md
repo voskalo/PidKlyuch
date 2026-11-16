@@ -229,7 +229,7 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - [ ] Create `backend/`, `frontend/`, `infra/` skeletons (`infra/` done by Anton; `backend/`, `frontend/` pending).
 - [ ] Deploy a "hello world" over HTTPS on day 1 to find hosting problems early (compose + Caddy config ready in `infra/`; live VPS deploy pending hosting choice).
 - [ ] Write the API contract in §8 (Liubomyr).
-- [ ] Write `docs/customs-rules.md` with verified rules, sources, and test cases (Anton).
+- [x] Write `docs/customs-rules.md` with verified rules, sources, and test cases (Anton — 2026-11-16; see `docs/customs-rules.md`).
 - [ ] Fill in "How to run" and "How to deploy" in `README.md` (Anton, with input from both other owners).
 
 ---
@@ -315,25 +315,30 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **How to verify / run:** Review `docs/customs-rules.md` §4 and check §4.6 calculations against €2,048 and €4,640 bounds.
 - **Not done / known problems / next steps:** Add Section 5 (10 worked test cases) to `docs/customs-rules.md` and update `AGENTS.md` §11 & §13.
 
+### 2026-11-16 13:42: Add 10 worked customs calculation test cases
+- **Who:** Anton Vertyporokh via Antigravity CLI
+- **Area:** docs
+- **What was done:** Appended Section 5 to `docs/customs-rules.md` with 10 deterministic worked test cases (`TC-P1`–`TC-P5` covering parcels under both current & July 2027 rules including USD→EUR conversion, and `TC-C1`–`TC-C5` covering electric, petrol, and diesel cars across displacement thresholds and the 15-year age cap) formatted as both summary tables and a JSON fixture block for backend unit tests. Updated `AGENTS.md` §11 (marked `docs/customs-rules.md` task done) and §13 (verified domain summary).
+- **Files touched:** `docs/customs-rules.md` (modified), `AGENTS.md` (modified)
+- **Decisions & why:** Provided fixed test NBU rates (`EUR=45.00 UAH`, `USD=41.40 UAH`) and explicit `current_year=2026` in the JSON test fixture so Liubomyr's backend unit tests are 100% deterministic offline.
+- **How to verify / run:** Check all 10 cases in `docs/customs-rules.md` §5 against formulas in §1–§4 (note `TC-C1` = `€2,048` and `TC-C3` = `€4,640` match pitch bounds exactly).
+- **Not done / known problems / next steps:** Wait for team tech stack decision (§5) and Liubomyr's API contract (§8), then deploy live VPS over HTTPS and update `README.md` run/deploy sections.
+
 ---
 
-## 13. Domain notes: Ukrainian customs (to be verified)
+## 13. Domain notes: Ukrainian customs (Verified 2026-11-16)
 
-> ⚠️ Anton must verify these against official sources (Customs Code of Ukraine, Tax Code of Ukraine,
-> customs.gov.ua, tax.gov.ua) and record the sources and exact rules in `docs/customs-rules.md`.
-> Update this section with a short summary and the date of verification.
+> Verified 2026-11-16 by Anton Vertyporokh against МКУ (Art. 234, 374), ПКУ (Art. 191, 196.1.17, 215.3.5-1), customs.gov.ua, tax.gov.ua, and NBU API specs. Full specification, formulas, legal TODOs, and 10 worked test cases live in [`docs/customs-rules.md`](docs/customs-rules.md).
 
-**Parcels (current rules, as assumed in the pitch):**
-- Duty-free threshold: **€150** per parcel (value of goods, excluding shipping, as assumed).
-- Above the threshold, on the **excess over €150**: duty **10%**, then VAT **20%** on (excess + duty).
-- Pitch consistency check: €200 parcel → excess €50 → duty €5 → VAT 20% × €55 = €11 → **total ≈ €16** ✔
-- **July 2027 change (from the pitch):** VAT applies to every imported parcel (no threshold for VAT). Exact
-  rules (e.g. whether duty is still threshold-based) must be confirmed.
+**Parcels (current rules — МКУ Art. 234, ПКУ Art. 196.1.17):**
+- Duty-free threshold: **€150.00** per parcel (goods value $V_{\text{EUR}}$; itemized shipping excluded from threshold base, included in total landed cost).
+- Above €150 on the **excess**: **10%** duty, then **20%** VAT on $(\text{Excess} + \text{Duty})$ (`€200` parcel → `€5.00` duty + `€11.00` VAT = **€16.00** tax).
+- **July 2027 change:** €150 VAT threshold is abolished; **20% VAT** applies from €0.01 on $(V_{\text{EUR}} + \text{Duty}_{2027})$, while 10% duty stays above €150 (`€200` parcel → `€5.00` duty + `€41.00` VAT = **€46.00** tax). Open legal-verification TODOs (shipping inside sub-€150 VAT base, C2C €45 gifts) are logged in `docs/customs-rules.md` §2.3.
 
-**Cars:** taxes are customs duty + excise + VAT. Excise depends on engine type, engine volume, and car age, and
-VAT is charged on (customs value + duty + excise). The duty rate may depend on country of origin (EU vs. non-EU).
-Exact formulas and rates are **not filled in yet**. The pitch's reference point is a €10,000 car → €2,048–€4,640
-in taxes, which can serve as a sanity check for test cases.
+**Cars (ПКУ Art. 215.3.5-1, МКУ):**
+- **Duty:** 10% of $V_{\text{EUR}}$ for `petrol`/`diesel`; 0% for `electric`.
+- **Excise:** ICE = $R_{\text{base}} \times (E_{\text{cm3}} / 1000) \times K_{\text{age}}$, where $R_{\text{base}}$ is `€50`/`€100` (`petrol` $\le 3000$ / $>3000\text{ cm}^3$) or `€75`/`€150` (`diesel` $\le 3500$ / $>3500\text{ cm}^3$), and $K_{\text{age}} = \min(15, \max(1, Y_{\text{curr}} - Y_{\text{prod}} - 1))$. EV = `€1.00 × battery_kWh`.
+- **VAT:** 20% on $(V_{\text{EUR}} + \text{Duty} + \text{Excise})$ (EV VAT exemption expired 1 Jan 2026).
+- **Pitch check (€10,000 car):** 40 kWh EV → **€2,048.00** tax; 2.0L diesel ($K_{\text{age}}=8$) → **€4,640.00** tax ✔
 
-**Exchange rates:** National Bank of Ukraine (NBU) official daily rates. The public NBU API returns JSON. Cache the
-rates daily and keep a fallback if the API is down.
+**Exchange rates:** NBU official daily JSON API (`https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json`). Cache daily (`Europe/Kyiv`) with 3-tier fallback (`nbu_live`/`nbu_cached` → `nbu_stale_cache` → static `fallback` constants).
