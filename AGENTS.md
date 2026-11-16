@@ -167,8 +167,12 @@ PidKlyuch/
     │   ├── core/config.py       # Settings (pydantic-settings, reads env/.env)
     │   ├── core/database.py     # engine, SessionLocal, Base, get_db(), init_db()
     │   ├── api/health.py        # GET /api/health
-    │   ├── models/              # SQLAlchemy ORM models
-    │   ├── services/            # business services (auth, rates, history)
+    │   ├── api/auth.py          # /api/auth/signup|signin|me
+    │   ├── api/schemas_auth.py  # pydantic request/response models for auth
+    │   ├── api/deps.py          # get_current_user / get_optional_user (Bearer JWT)
+    │   ├── core/security.py     # PBKDF2 password hashing, JWT encode/decode
+    │   ├── models/              # SQLAlchemy ORM models: user.py (User)
+    │   ├── services/            # business services: auth_service.py (AuthService: register/authenticate)
     │   └── customs/             # customs calculation engine (pure Python, no DB/HTTP)
     └── tests/                   # pytest; conftest.py sets a test SQLite DB + fresh tables per test
 ```
@@ -211,9 +215,9 @@ Money in responses is a **string with 2 decimals** (e.g. `"16.00"`), so no float
 | Status | Method | Path | Auth | Purpose |
 |---|---|---|---|---|
 | ✅ | GET | `/api/health` | – | liveness check for deploy |
-| ⬜ | POST | `/api/auth/signup` | – | create account → token |
-| ⬜ | POST | `/api/auth/signin` | – | sign in → token |
-| ⬜ | GET | `/api/auth/me` | required | current user |
+| ✅ | POST | `/api/auth/signup` | – | create account → token |
+| ✅ | POST | `/api/auth/signin` | – | sign in → token |
+| ✅ | GET | `/api/auth/me` | required | current user |
 | ⬜ | POST | `/api/calculate` | optional | calculate landed price; saved to history if signed in |
 | ⬜ | POST | `/api/calculate/compare-rules` | – | parcel: current rules vs July 2027 rules |
 | ⬜ | GET | `/api/rates` | – | NBU rates used for conversion |
@@ -361,6 +365,22 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **How to verify / run:** `cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt && .venv/bin/pytest`;
   run with `.venv/bin/uvicorn app.main:app --reload`, then open http://localhost:8000/docs
 - **Not done / known problems / next steps:** auth, calculation engine, NBU rates, history, stats (§8 ⬜).
+
+
+### 2026-11-16: Auth: sign-up, sign-in, current user
+- **Who:** Liubomyr Voskalo via Claude Code (Opus 5.5)
+- **Area:** backend
+- **What was done:** Added the `User` model (email is unique and stored lowercase; lookups are case-insensitive),
+  PBKDF2-SHA256 password hashing, JWT access tokens, `AuthService` (register/authenticate), the
+  `get_current_user` / `get_optional_user` dependencies, and the endpoints `POST /api/auth/signup` (201, 409 on a
+  duplicate), `POST /api/auth/signin` (401 on bad credentials), and `GET /api/auth/me`.
+- **Files touched:** created `backend/app/models/user.py`, `backend/app/core/security.py`,
+  `backend/app/services/auth_service.py`, `backend/app/api/{auth.py,deps.py,schemas_auth.py}`,
+  `backend/tests/test_auth.py`; modified `backend/app/models/__init__.py`, `backend/app/main.py`, `AGENTS.md`.
+- **Decisions & why:** stdlib PBKDF2 instead of bcrypt, so there are no native build deps on hosting. Sign-out is
+  client-side (stateless JWT).
+- **How to verify / run:** `cd backend && .venv/bin/pytest tests/test_auth.py`
+- **Not done / known problems / next steps:** no password reset or email verification (out of scope for the demo).
 
 ---
 
