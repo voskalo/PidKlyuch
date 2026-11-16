@@ -155,10 +155,13 @@ Current state (update on every structural change):
 ```
 PidKlyuch/
 ├── infra/
-│   └── README.md  # deployment architecture, prerequisites, run & HTTPS deploy instructions
-├── AGENTS.md      # this file: shared AI context + work log (read first, update last)
-├── CLAUDE.md      # pointer so Claude Code auto-loads AGENTS.md
-└── README.md      # public description, team division of work, run & deploy instructions
+│   ├── hello-world/
+│   │   └── index.html  # Day 1 static status/landing page for HTTPS smoke test
+│   ├── Dockerfile      # lightweight caddy:2-alpine static server image for hello-world
+│   └── README.md       # deployment architecture, prerequisites, run & HTTPS deploy instructions
+├── AGENTS.md           # this file: shared AI context + work log (read first, update last)
+├── CLAUDE.md           # pointer so Claude Code auto-loads AGENTS.md
+└── README.md           # public description, team division of work, run & deploy instructions
 ```
 
 Planned (required by grading):
@@ -259,6 +262,15 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **Decisions & why:** Chosen Docker Compose + Caddy v2 for automatic HTTPS provisioning (see §10).
 - **How to verify / run:** Read `infra/README.md`; compose stack will be added in Steps 2–3.
 - **Not done / known problems / next steps:** Still need `infra/hello-world/index.html`, `infra/Dockerfile`, `infra/Caddyfile`, `infra/docker-compose.yml`, and `docs/customs-rules.md`.
+
+### 2026-11-16 13:34: Add Dockerfile and hello-world page for HTTPS test
+- **Who:** Anton Vertyporokh via Antigravity CLI
+- **Area:** infra
+- **What was done:** Created `infra/hello-world/index.html` (bilingual UA/EN PidKlyuch Day 1 HTTPS verification landing page) and `infra/Dockerfile` (`caddy:2-alpine` running `caddy file-server --listen :80 --root /usr/share/caddy`). Updated `AGENTS.md` §6.
+- **Files touched:** `infra/hello-world/index.html` (created), `infra/Dockerfile` (created), `AGENTS.md` (modified)
+- **Decisions & why:** Used `caddy:2-alpine` with explicit `caddy file-server` on port 80 so the container stays lightweight and shares the same base image family as the reverse proxy.
+- **How to verify / run:** `docker build -t pidklyuch-hello ./infra` (full compose verification after Step 3).
+- **Not done / known problems / next steps:** Still need `infra/Caddyfile`, `infra/docker-compose.yml`, and `docs/customs-rules.md`.
 
 ---
 
