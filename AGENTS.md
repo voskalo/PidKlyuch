@@ -171,8 +171,13 @@ PidKlyuch/
     │   ├── api/schemas_auth.py  # pydantic request/response models for auth
     │   ├── api/deps.py          # get_current_user / get_optional_user (Bearer JWT)
     │   ├── core/security.py     # PBKDF2 password hashing, JWT encode/decode
+    │   ├── api/calculate.py     # POST /api/calculate, POST /api/calculate/compare-rules, GET /api/rates
+    │   ├── api/schemas_calc.py  # ParcelIn/CarIn (discriminated by delivery_type), CalculationOut, RatesOut
     │   ├── models/              # SQLAlchemy ORM models: user.py (User)
-    │   ├── services/            # business services: auth_service.py (AuthService: register/authenticate)
+    │   ├── services/            # business services (use cases)
+    │   │   ├── auth_service.py        # AuthService: register/authenticate
+    │   │   ├── rates_service.py       # RatesService: NBU fetch, 1h cache, fallback; RateTable.to_eur()
+    │   │   └── calculation_service.py # CalculationService: request → EUR → calculator → response with UAH
     │   └── customs/             # customs calculation engine (pure Python, no DB/HTTP), all amounts in EUR
     │       ├── rules.py         # ParcelRules/CarRules dataclasses + PARCEL_CURRENT, PARCEL_JULY_2027, CAR_CURRENT
     │       │                    #   → THE ONLY place with tax rates/thresholds; edit numbers here
@@ -222,9 +227,9 @@ Money in responses is a **string with 2 decimals** (e.g. `"16.00"`), so no float
 | ✅ | POST | `/api/auth/signup` | – | create account → token |
 | ✅ | POST | `/api/auth/signin` | – | sign in → token |
 | ✅ | GET | `/api/auth/me` | required | current user |
-| ⬜ | POST | `/api/calculate` | optional | calculate landed price; saved to history if signed in |
-| ⬜ | POST | `/api/calculate/compare-rules` | – | parcel: current rules vs July 2027 rules |
-| ⬜ | GET | `/api/rates` | – | NBU rates used for conversion |
+| ✅ | POST | `/api/calculate` | optional | calculate landed price; saved to history if signed in |
+| ✅ | POST | `/api/calculate/compare-rules` | – | parcel: current rules vs July 2027 rules |
+| ✅ | GET | `/api/rates` | – | NBU rates used for conversion |
 | ⬜ | GET | `/api/history` | required | user's saved calculations, newest first |
 | ⬜ | DELETE | `/api/history/{id}` | required | delete one saved calculation |
 | ⬜ | GET | `/api/stats` | – | aggregate counters for the report |
@@ -259,7 +264,7 @@ Money in responses is a **string with 2 decimals** (e.g. `"16.00"`), so no float
 Response `200`:
 ```json
 {"delivery_type": "parcel", "rules": "current", "input_currency": "EUR",
- "rate_date": "2026-11-16", "eur_uah": "48.1234",
+ "rate_date": "2026-11-16", "rate_source": "nbu", "eur_uah": "50.2220",
  "goods_value_eur": "200.00", "shipping_eur": "15.00",
  "lines": [
    {"code": "duty", "label": "Мито", "amount_eur": "5.00", "amount_uah": "240.62",
@@ -271,7 +276,10 @@ Response `200`:
  "landed_total_eur": "231.00", "landed_total_uah": "11116.51",
  "notes": ["..."], "calculation_id": 42}
 ```
-`line.code` ∈ `duty | excise | vat`. `calculation_id` is `null` when the caller is not signed in.
+`line.code` ∈ `duty | excise | vat`. A parcel under the threshold has `lines: []`. `calculation_id` is `null`
+when the caller is not signed in. `rate_source` is `"fallback"` if NBU was unreachable, in which case `notes` says so
+and the UI should show a small warning. `formula` and `notes` are Ukrainian text, ready to display. The 422 body for
+a car missing `engine_volume_cc` / `battery_kwh` contains the reason in `detail[0].msg`.
 
 **POST /api/calculate/compare-rules**: same parcel body (`rules` is ignored) → `{"current": <result>, "july_2027": <result>}`.
 
@@ -407,6 +415,26 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **Not done / known problems / next steps:** not exposed over HTTP yet (next: NBU rates + `/api/calculate`). The
   rates still need Anton's verification (see the open questions in §13).
 
+
+### 2026-11-16: NBU exchange rates + calculate API
+- **Who:** Liubomyr Voskalo via Claude Code (Opus 5.5)
+- **Area:** backend
+- **What was done:** Added `RatesService` (live NBU fetch via httpx, 1h in-memory cache, last-good / static fallback)
+  and `CalculationService`, which converts the input currency to EUR, runs the customs engine, and adds UAH amounts
+  and notes. Added the endpoints `POST /api/calculate` (parcel or car, discriminated by `delivery_type`, 422 on
+  invalid engine data), `POST /api/calculate/compare-rules` (current vs July 2027 for parcels), and `GET /api/rates`.
+  Tests override `get_rates_service` with a fake NBU payload (1 EUR = 50 UAH, 1 USD = 40 UAH) in `tests/conftest.py`.
+  Checked against the live NBU API on 16.11.2026: 1 EUR = 50.222 UAH.
+- **Files touched:** created `backend/app/services/{rates_service.py,calculation_service.py}`,
+  `backend/app/api/{calculate.py,schemas_calc.py}`, `backend/tests/{test_rates.py,test_calculate_api.py}`;
+  modified `backend/app/main.py`, `backend/tests/conftest.py`, `AGENTS.md` (§6, §8, §12, §13).
+- **Decisions & why:** the response adds a `rate_source` field (not in the original contract) so the UI can warn
+  when fallback rates are used. Formulas are shown in EUR, because the customs rules are defined in EUR.
+- **How to verify / run:** `cd backend && .venv/bin/pytest` (39 tests). Manual check: run uvicorn, open `/docs`, and
+  try `POST /api/calculate` with the parcel example from §8.
+- **Not done / known problems / next steps:** calculations are not saved to history yet (`calculation_id` is always
+  null); history and stats endpoints are next.
+
 ---
 
 ## 13. Domain notes: Ukrainian customs (to be verified)
@@ -436,5 +464,9 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - Open questions for Anton: the current EU-origin duty rate; whether EVs still have a duty/VAT exemption; whether
   the age coefficient uses calendar years or full years since the manufacture date.
 
-**Exchange rates:** National Bank of Ukraine (NBU) official daily rates. The public NBU API returns JSON. Cache the
-rates daily and keep a fallback if the API is down.
+**Exchange rates (implemented in `backend/app/services/rates_service.py`):** NBU official daily rates from
+`https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json` (a list of `{cc, rate, exchangedate}`, where rate is
+UAH per 1 unit). They are cached in memory for 1 hour. If a fetch fails, the last good table is used, and if there is
+none, the static `FALLBACK_UAH_PER_UNIT` (`source: "fallback"`). Supported: EUR, USD, UAH, GBP, PLN. Input amounts are
+converted to EUR (amount × UAH-per-currency ÷ UAH-per-EUR), the calculation runs in EUR, and the results are shown in
+EUR and UAH.
