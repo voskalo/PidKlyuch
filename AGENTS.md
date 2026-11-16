@@ -91,12 +91,13 @@ Full division of work is in `README.md` → "Team & division of work". Summary:
 
 | Member | Owns | Folders |
 |---|---|---|
-| **Liubomyr Voskalo** | Backend: API, database, auth (sign-up/sign-in), calculation engine implementation, NBU rates, history | `backend/` |
+| **Liubomyr Voskalo** | Backend: API, database, auth (sign-up/sign-in), **customs rules research + rates file**, calculation engine, law watcher, NBU rates, history | `backend/` |
 | **Anna Kravchenko** | Frontend: all UI, calculator flow, breakdown view, auth pages, history page, donation button | `frontend/` |
-| **Anton Vertyporoh** | Infra and deploy on **AWS** (HTTPS), customs-rules research and test cases, user testing coordination, final report | `infra/`, `docs/` |
+| **Anton Vertyporoh** | Infra and deploy on **AWS** (HTTPS), scheduled law-watcher run, user testing coordination, final report | `infra/`, `docs/` |
 
-The interfaces between members are the **API contract (§8)**, owned by Liubomyr and consumed by Anna, and the
-**customs rules spec + test cases (§13 and `docs/customs-rules.md`)**, owned by Anton and implemented by Liubomyr.
+The main interface between members is the **API contract (§8)**, owned by Liubomyr and consumed by Anna.
+Customs rules research was moved from Anton to Liubomyr on 16.11.2026. The rules now live in
+`backend/app/customs/tax_rates.json`, summarized with sources in §13.
 
 ---
 
@@ -181,6 +182,8 @@ PidKlyuch/
     ├── requirements-dev.txt     # + pytest
     ├── .env.example             # documented env vars (copy to .env)
     ├── Dockerfile               # python:3.12-slim, runs uvicorn on $PORT (default 8000); build context = backend/
+    ├── scripts/check_law_updates.py  # law watcher: fetches source articles from zakon.rada.gov.ua, compares clause
+    │                                 #   fingerprints with tax_rates.json; exit 0 ok / 1 changed / 2 can't check
     ├── app/
     │   ├── main.py              # create_app(): CORS, routers, DB init on startup
     │   ├── core/config.py       # Settings (pydantic-settings, reads env/.env)
@@ -200,16 +203,20 @@ PidKlyuch/
     │   │   ├── calculation_service.py # CalculationService: request → EUR → calculator → response with UAH
     │   │   └── history_service.py     # HistoryService: record / list_for / delete_for / stats
     │   └── customs/             # customs calculation engine (pure Python, no DB/HTTP), all amounts in EUR
-    │       ├── rules.py         # ParcelRules/CarRules dataclasses + PARCEL_CURRENT, PARCEL_JULY_2027, CAR_CURRENT
-    │       │                    #   → THE ONLY place with tax rates/thresholds; edit numbers here
+    │       ├── tax_rates.json   # ★ ALL tax numbers (thresholds, rates, excise table) + legal sources + fingerprints
+    │       │                    #   → THE ONLY place to change taxes. No numbers in code.
+    │       ├── rules.py         # loads + validates tax_rates.json (or $TAX_RATES_PATH) into ParcelRules/CarRules;
+    │       │                    #   exports TAX_RATES, PARCEL_RULES, PARCEL_CURRENT, PARCEL_JULY_2027, CAR_CURRENT
     │       ├── models.py        # ParcelInput, CarInput, TaxLine, Breakdown (totals), money() rounding, enums
     │       └── calculators.py   # CustomsCalculator (ABC) → ParcelCalculator, CarCalculator (Strategy pattern)
-    └── tests/                   # pytest (43 tests). Run: cd backend && .venv/bin/pytest
+    └── tests/                   # pytest (66 tests). Run: cd backend && .venv/bin/pytest
         ├── conftest.py          # sets test env (SQLite test.db, fast hashing), `client` fixture with fresh tables,
         │                        #   overrides get_rates_service with FAKE_NBU (1 EUR = 50 UAH, 1 USD = 40 UAH)
         ├── test_health.py       # /api/health
         ├── test_auth.py         # hashing, signup/signin/me, duplicates, validation, bad tokens
-        ├── test_customs.py      # pure engine: pitch figures, thresholds, 2027 rules, excise, age coefficient
+        ├── test_customs.py      # pure engine: hand-calculated cases from the verified law (parcels, 2027, cars, EV)
+        ├── test_tax_rates_file.py # rates file loads, cites sources, TAX_RATES_PATH override, broken file fails
+        ├── test_law_watcher.py  # watcher offline: normalize/extract/fingerprint, changed → 1, missing/offline → 2
         ├── test_rates.py        # NBU parsing, conversion, fallback, cache-on-failure, /api/rates
         ├── test_calculate_api.py# /api/calculate (parcel, car, USD conversion, 422s), compare-rules
         └── test_history.py      # history save/list/delete/privacy, /api/stats, normalize_db_url
@@ -228,7 +235,7 @@ PidKlyuch/
 ├── backend/       # API server, auth, calculation engine, DB access   (owner: Liubomyr)
 ├── frontend/      # web UI                                           (owner: Anna)
 ├── infra/         # Docker / compose / deploy configs, CI            (owner: Anton)
-├── docs/          # customs-rules.md, user-testing notes, report     (owner: Anton)
+├── docs/          # user-testing notes, report                       (owner: Anton)
 ├── AGENTS.md
 └── README.md
 ```
@@ -246,6 +253,7 @@ Backend vars are documented in `backend/.env.example`, read by `backend/app/core
 - `CORS_ORIGINS`: backend, comma-separated frontend origins, e.g. `https://pidklyuch.example.com`. **Required in prod.**
 - `NBU_API_URL`: backend, NBU exchange-rate endpoint. Optional (has a default).
 - `PASSWORD_HASH_ITERATIONS`: backend, PBKDF2 iterations, default `390000`. Only lowered in tests.
+- `TAX_RATES_PATH`: backend, alternative rates file (default `app/customs/tax_rates.json`), e.g. one synced from S3. Optional.
 
 ---
 
@@ -295,6 +303,8 @@ Money in responses is a **string with 2 decimals** (e.g. `"16.00"`), so no float
 - `category`: `electronics | clothing | cosmetics | toys | other`
 - `currency`: `EUR | USD | UAH | GBP | PLN`
 - `rules`: `current | july_2027` (default `current`)
+- `sender`: `marketplace | private` (default `marketplace`). It only matters for `july_2027`, where a non-commercial
+  parcel from a private person up to €45 is tax-free. The UI can ask "Is this a gift from a private person?".
 ```json
 {"delivery_type": "car", "car_price": 10000, "shipping_price": 1200, "currency": "EUR",
  "engine_type": "petrol", "engine_volume_cc": 2000, "battery_kwh": null,
@@ -302,7 +312,9 @@ Money in responses is a **string with 2 decimals** (e.g. `"16.00"`), so no float
 ```
 - `engine_type`: `petrol | diesel | hybrid | electric` (`engine_volume_cc` is required for petrol, diesel, and
   hybrid; `battery_kwh` is required for electric)
-- `origin`: `eu | other` (EU-origin cars have a different duty rate)
+- `origin`: `eu | other`. `eu` means **EU origin proven by EUR.1 / an origin declaration** (0% duty), not "bought in
+  the EU". Electric cars always have 0% duty.
+- `hybrid` pays excise by its combustion engine volume at the petrol rate (diesel hybrids: choose `diesel`).
 
 Response `200`:
 ```json
@@ -317,12 +329,15 @@ Response `200`:
  ],
  "taxes_total_eur": "16.00", "taxes_total_uah": "769.97",
  "landed_total_eur": "231.00", "landed_total_uah": "11116.51",
- "notes": ["..."], "calculation_id": 42}
+ "notes": ["..."], "rates_version": "2026-11-16", "rates_verified_at": "2026-11-16",
+ "calculation_id": 42}
 ```
 `line.code` ∈ `duty | excise | vat`. A parcel under the threshold has `lines: []`. `calculation_id` is `null`
 when the caller is not signed in. `rate_source` is `"fallback"` if NBU was unreachable, in which case `notes` says so
 and the UI should show a small warning. `formula` and `notes` are Ukrainian text, ready to display. The 422 body for
 a car missing `engine_volume_cc` / `battery_kwh` contains the reason in `detail[0].msg`.
+`rates_verified_at` = the date the tax rates were last checked against the law. Show it in the UI (e.g. "Ставки
+станом на 16.11.2026"). Parcels over €10,000 get a note that the result is only approximate.
 
 **POST /api/calculate/compare-rules**: same parcel body (`rules` is ignored) → `{"current": <result>, "july_2027": <result>}`.
 
@@ -377,6 +392,14 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - 2026-11-16: **All hosting on AWS, using AWS services** (backend, database, frontend, secrets). Reason: team
   decision. The concrete services (App Runner vs ECS vs Beanstalk, S3+CloudFront vs Amplify) are Anton's choice;
   record them here and in §5 once chosen. (Liubomyr)
+- 2026-11-16: **All tax numbers live in one data file, `backend/app/customs/tax_rates.json`, which is loaded at
+  startup; it is not auto-updated from the internet.** Reason: there is no official machine-readable API for
+  Ukrainian customs/excise rates (only legal text). Auto-applying scraped numbers could silently show users wrong
+  taxes, and the law changes rarely and with advance notice. Instead, `scripts/check_law_updates.py` **detects**
+  changes (fingerprints of the exact clauses) and a human updates the JSON in a reviewed commit, so git history is
+  the audit trail. Exchange rates, which change daily, ARE loaded automatically (NBU API). `TAX_RATES_PATH` allows
+  an external file (e.g. from S3) if rates ever need to change without a redeploy. (Liubomyr + Claude Code)
+- 2026-11-16: Customs rules research moved from Anton to Liubomyr (Liubomyr's decision). (Liubomyr)
 - 2026-11-16: Work happens on branch `liubomyr/backend`; it gets merged into `main` when the backend MVP is ready. (Liubomyr)
 
 ---
@@ -393,9 +416,11 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - [ ] Deploy the backend on AWS over HTTPS with RDS Postgres. `backend/Dockerfile` is ready (push the image to ECR); set `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGINS` from Secrets Manager/SSM (Anton + Liubomyr).
 - [ ] Put the AWS setup into `infra/` (IaC templates or step-by-step console instructions), since `infra/` is graded (Anton).
 - [ ] The Docker image build was not verified (no Docker daemon on Liubomyr's machine on 16.11). Run `docker build backend` once.
-- [ ] Replace the assumed customs rates with verified ones in `backend/app/customs/rules.py` and add Anton's test cases to `backend/tests/test_customs.py` (Anton → Liubomyr).
+- [x] Verify the customs rates against the law, move them into `tax_rates.json`, and test with hand-calculated cases (Liubomyr, 16.11).
 - [ ] Optional: rate limiting on auth endpoints, password reset (not needed for the demo).
-- [ ] Write `docs/customs-rules.md` with verified rules, sources, and test cases (Anton).
+- [ ] Schedule `cd backend && python scripts/check_law_updates.py` weekly (GitHub Actions cron or AWS EventBridge) and alert the team when it exits ≠ 0 (Anton).
+- [ ] Re-check by hand when the Cabinet sets the start date of the July 2027 parcel VAT (source `law_5025_ix`) (Liubomyr).
+- [ ] Optional: a "luggage" delivery type. The rules are already verified (Customs Code 374 p.1 and p.4): €1000 tax-free by air, €500/50 kg by land, then 10% duty + VAT on the excess (Liubomyr).
 - [x] README "How to run locally" → Backend, plus backend production env vars under "How to deploy" (Liubomyr).
 - [ ] README: the Frontend run section (Anna) and the actual deploy steps / hosting / HTTPS (Anton).
 
@@ -544,34 +569,77 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **How to verify / run:** n/a (docs only)
 - **Not done / known problems / next steps:** the concrete AWS services and `infra/` are still to be done (Anton).
 
+
+### 2026-11-16: Customs rules verified against the law; all rates moved to tax_rates.json; law watcher
+- **Who:** Liubomyr Voskalo via Claude Code (Opus 5.5)
+- **Area:** backend / docs
+- **What was done:** The customs research task was moved from Anton to Liubomyr. Checked every rate against the
+  official consolidated texts (Customs Code art. 374, Tax Code 215.3.5-1 and 14.1.49-1, Laws 5025-IX/5026-IX of
+  15.10.2026). **Fixed 4 wrong rules:**
+  (1) car age coefficient is `current − year − 1` (was `current − year`);
+  (2) hybrids pay excise by engine volume at the petrol rate (was a flat €100, which belongs to other codes);
+  (3) electric cars always have 0% duty (was by origin);
+  (4) July 2027 parcels: VAT only on parcels ≤ €150, no duty on them, P2P ≤ €45 exempt, >€150 unchanged (was VAT on
+  the full value of every parcel).
+  Added a warning note for parcels > €10,000. Moved all numbers into `backend/app/customs/tax_rates.json` (loaded and
+  validated by `rules.py`, overridable via `TAX_RATES_PATH`). Added `scripts/check_law_updates.py` (clause
+  fingerprints, verified working against the live site). The API now accepts `sender` (parcel) and returns
+  `rates_version` and `rates_verified_at`. Rewrote the customs tests with hand-calculated cases. 66 tests pass.
+- **Files touched:** created `backend/app/customs/tax_rates.json`, `backend/scripts/check_law_updates.py`,
+  `backend/tests/test_tax_rates_file.py`, `backend/tests/test_law_watcher.py`; modified
+  `backend/app/customs/{rules.py,calculators.py,models.py}`, `backend/app/api/schemas_calc.py`,
+  `backend/app/services/calculation_service.py`, `backend/tests/{test_customs.py,test_calculate_api.py}`,
+  `backend/.env.example`, `README.md` (task moved to Liubomyr, timeline), `AGENTS.md` (§3, §6–§8, §10, §11, §13).
+- **Decisions & why:** see §10 (rates in a data file + change detection instead of auto-update).
+- **How to verify / run:** `cd backend && .venv/bin/pytest` (66 passed); `.venv/bin/python scripts/check_law_updates.py` (all `[ok]`).
+- **Not done / known problems / next steps:** schedule the watcher weekly (Anton); 3 sources are manual (news,
+  tariff annex); the July 2027 start date depends on a Cabinet decision. **Pitch note:** the €4,640 figure matches a
+  2013 car, not a 2014 one; it is still a valid example.
+
 ---
 
-## 13. Domain notes: Ukrainian customs (to be verified)
+## 13. Domain notes: Ukrainian customs (VERIFIED 16.11.2026)
 
-> ⚠️ Anton must verify these against official sources (Customs Code of Ukraine, Tax Code of Ukraine,
-> customs.gov.ua, tax.gov.ua) and record the sources and exact rules in `docs/customs-rules.md`.
-> Update this section with a short summary and the date of verification.
+All numbers are in `backend/app/customs/tax_rates.json`, which includes source ids, URLs, and fingerprints. Verified
+by Liubomyr (via Claude Code) against the consolidated texts on zakon.rada.gov.ua (Customs Code revision of
+23.10.2026, Tax Code revision of 01.11.2026) plus news coverage of the laws adopted 15.10.2026.
 
-**Parcels (current rules, as assumed in the pitch):**
-- Duty-free threshold: **€150** per parcel (value of goods, excluding shipping, as assumed).
-- Above the threshold, on the **excess over €150**: duty **10%**, then VAT **20%** on (excess + duty).
-- Pitch consistency check: €200 parcel → excess €50 → duty €5 → VAT 20% × €55 = €11 → **total ≈ €16** ✔
-- **July 2027 change (from the pitch):** VAT applies to every imported parcel (no threshold for VAT). Exact
-  rules (e.g. whether duty is still threshold-based) must be confirmed.
-- **Implemented as** `PARCEL_CURRENT` and `PARCEL_JULY_2027` in `backend/app/customs/rules.py`. Assumptions: shipping
-  is NOT counted toward the €150 limit; in 2027 the duty is still 10% above €150, and VAT is 20% × (goods + duty).
+**Parcels: current rules (Customs Code art. 374 p.7, verbatim check):**
+- Goods (except excisable ones) in international postal or express shipments with a **total invoice value ≤ €150** are
+  **not taxed**. The threshold is based on the invoice value of the goods, so **shipping is not counted**.
+- **€150 < value ≤ €10,000:** duty **10%** and VAT **20%**, and the tax base is **only the part above €150**.
+  VAT = 20% × (excess + duty).
+- **> €10,000 (p.8):** full commercial declaration at full tariff rates. The calculator adds an "approximate" note.
+- Check: €200 parcel → duty €5 + VAT €11 = **€16** ✔ (the pitch number).
 
-**Cars (implemented in `backend/app/customs/rules.py` → `CAR_CURRENT`, still needs verification by Anton):**
-- Customs value = car price + delivery to the Ukrainian border.
-- Duty: **10%** of the customs value for non-EU origin, **0%** for EU origin (DCFTA; verify the current rate).
-- Excise: petrol €50 per litre of engine volume (≤3000 cm³) or €100 (>3000 cm³); diesel €75 (≤3500 cm³) or €150
-  (>3500 cm³); then × the **age coefficient** = current year − manufacture year, clamped to 1..15.
-  Hybrid: flat €100. Electric: €1 per kWh of battery.
-- VAT **20%** × (customs value + duty + excise).
-- Pitch consistency checks (both covered by unit tests): non-EU petrol 2.0 l from 2014, €10,000 → **€4,640** ✔;
-  EU-origin new petrol 0.8 l, €10,000 → **€2,048** ✔.
-- Open questions for Anton: the current EU-origin duty rate; whether EVs still have a duty/VAT exemption; whether
-  the age coefficient uses calendar years or full years since the manufacture date.
+**Parcels: July 2027 rules (Laws № 5025-IX (Tax Code) and № 5026-IX (Customs Code), adopted 15.10.2026):**
+- VAT 20% on parcels **≤ €150**, collected by the marketplace at checkout ("distance sale", Tax Code 14.1.49-1).
+  **No duty** on them. Starts **no earlier than 1 July 2027**, after a Cabinet decision.
+- Non-commercial **private person → private person parcels up to €45** remain tax-free.
+- Parcels **> €150**: the same as now (duty + VAT on the excess).
+- Implementation assumptions (flagged): the VAT base is the goods value without shipping. Private parcels between
+  €45 and €150 pay VAT (only ≤ €45 is exempt).
+
+**Cars (Tax Code 215.3.5-1, verbatim check):**
+- Excise = base × K_engine × K_age.
+  - Base, € per unit: petrol ≤3000 cm³ **50**, >3000 **100**; diesel ≤3500 cm³ **75**, >3500 **150**.
+  - K_engine = cm³ / 1000.
+  - **K_age = full calendar years from the year AFTER manufacture to the current year**, i.e. `current − year − 1`,
+    min 1, max 15. A 2014 car in 2026 has K=11, not 12. Many online calculators get this wrong.
+- **Hybrids:** there is no separate rate; they pay by the combustion engine (spark-ignition = petrol rate). The flat
+  €100 rate in the code applies to other codes (8703 80 x0 90, 8703 90), not hybrids.
+- **Electric (8703 80 10 10 / 80 90 10):** €1 per kWh of battery; duty 0%; **VAT 20% since 01.01.2026** (the
+  exemption was not extended; secondary sources).
+- Duty: **10%** of the customs value (car price + delivery to the border); **0% for EU origin** under the DCFTA,
+  only with proof of origin (secondary sources). VAT 20% × (customs value + duty + excise).
+- Not included: the Pension Fund levy at first registration, certification, and broker fees.
+- Checks against the pitch: €10,000 non-EU petrol 2.0 l → €4,520 for a 2014 car, **€4,640 for a 2013 car** (the
+  pitch's upper number). EU-origin new petrol 0.8 l → **€2,048** ✔.
+
+**Keeping rates current:** run `cd backend && .venv/bin/python scripts/check_law_updates.py` (planned to run weekly).
+- `[CHANGED]`/`[MISSING]` → read the new law text, edit `tax_rates.json` (and tests), run `pytest`, then
+  `scripts/check_law_updates.py --update` to store the new fingerprints, then commit with the law number in the message.
+- `[manual]` sources (news, tariff annex) must be re-checked by hand.
 
 **Exchange rates (implemented in `backend/app/services/rates_service.py`):** NBU official daily rates from
 `https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json` (a list of `{cc, rate, exchangedate}`, where rate is
