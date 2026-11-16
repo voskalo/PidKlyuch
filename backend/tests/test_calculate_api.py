@@ -50,3 +50,11 @@ def test_compare_rules(client):
     b = r.json()
     assert b["current"]["taxes_total_eur"] == "0.00"
     assert b["july_2027"]["taxes_total_eur"] == "8.00"
+    gift = client.post("/api/calculate/compare-rules", json={**PARCEL, "item_price": 40, "sender": "private"})
+    assert gift.json()["july_2027"]["taxes_total_eur"] == "0.00"
+
+
+def test_response_says_which_rates_were_used(client):
+    b = client.post("/api/calculate", json=PARCEL).json()
+    assert b["rates_verified_at"] == "2026-11-16"
+    assert b["rates_version"]

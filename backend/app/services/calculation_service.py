@@ -3,8 +3,8 @@ from decimal import Decimal
 
 from app.api.schemas_calc import CalculationOut, CarIn, ParcelIn, TaxLineOut
 from app.customs.calculators import CarCalculator, ParcelCalculator
-from app.customs.models import Breakdown, CarInput, EngineType, Origin, ParcelInput, money
-from app.customs.rules import CAR_CURRENT, PARCEL_RULES
+from app.customs.models import Breakdown, CarInput, EngineType, Origin, ParcelInput, Sender, money
+from app.customs.rules import CAR_CURRENT, PARCEL_RULES, TAX_RATES
 from app.services.rates_service import RateTable
 
 
@@ -24,6 +24,7 @@ class CalculationService:
                 goods_value_eur=self._eur(body.item_price, body.currency),
                 shipping_eur=self._eur(body.shipping_price, body.currency),
                 category=body.category,
+                sender=Sender(body.sender),
             )
             return ParcelCalculator(PARCEL_RULES[body.rules]).calculate(data)
         data = CarInput(
@@ -67,4 +68,6 @@ class CalculationService:
             landed_total_eur=b.landed_total_eur,
             landed_total_uah=self._uah(b.landed_total_eur),
             notes=notes,
+            rates_version=TAX_RATES.version,
+            rates_verified_at=TAX_RATES.verified_at,
         )

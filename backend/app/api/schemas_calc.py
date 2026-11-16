@@ -15,6 +15,7 @@ class ParcelIn(BaseModel):
     shipping_price: Amount = Decimal("0")
     currency: Currency = "EUR"
     rules: Literal["current", "july_2027"] = "current"
+    sender: Literal["marketplace", "private"] = "marketplace"
 
 
 class CarIn(BaseModel):
@@ -63,6 +64,8 @@ class CalculationOut(BaseModel):
     landed_total_eur: Decimal
     landed_total_uah: Decimal
     notes: list[str]
+    rates_version: str
+    rates_verified_at: Date
     calculation_id: int | None = None
 
 

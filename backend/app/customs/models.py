@@ -22,11 +22,17 @@ class Origin(str, Enum):
     OTHER = "other"
 
 
+class Sender(str, Enum):
+    MARKETPLACE = "marketplace"  # online shop / marketplace purchase (distance sale)
+    PRIVATE = "private"  # non-commercial parcel from a private person
+
+
 @dataclass(frozen=True)
 class ParcelInput:
     goods_value_eur: Decimal
     shipping_eur: Decimal
     category: str = "other"
+    sender: Sender = Sender.MARKETPLACE
 
 
 @dataclass(frozen=True)
