@@ -306,6 +306,15 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **How to verify / run:** Review `docs/customs-rules.md` §2–§3; verify €200 parcel gives €16.00 today vs. €46.00 under July 2027 rules.
 - **Not done / known problems / next steps:** Add Section 4 (car import tax formulas) and Section 5 (10 worked test cases) to `docs/customs-rules.md`.
 
+### 2026-11-16 13:41: Add car import tax formulas to customs-rules.md
+- **Who:** Anton Vertyporokh via Antigravity CLI
+- **Area:** docs
+- **What was done:** Appended Section 4 (Passenger Car Import Tax Formulas under ПКУ Art. 215.3.5-1 & МКУ) to `docs/customs-rules.md`, specifying customs duty (10% ICE, 0% EV), excise formulas (`R_base * (cm3/1000) * K_age` with `[1, 15]` age clamping and `€1/kWh` for EVs), 20% VAT (noting 2026 expiry of EV VAT exemption), and pitch benchmark checks (`€2,048` EV to `€4,640` diesel on a `€10,000` vehicle). Updated `AGENTS.md` §12.
+- **Files touched:** `docs/customs-rules.md` (modified), `AGENTS.md` (modified)
+- **Decisions & why:** Specified `K_age = min(15, max(1, current_year - production_year - 1))` (with optional explicit `age_years` override) and baseline 10% ICE duty + 2026 20% EV VAT so backend calculations align with both current Ukrainian law and the pitch's `€2,048–€4,640` range.
+- **How to verify / run:** Review `docs/customs-rules.md` §4 and check §4.6 calculations against €2,048 and €4,640 bounds.
+- **Not done / known problems / next steps:** Add Section 5 (10 worked test cases) to `docs/customs-rules.md` and update `AGENTS.md` §11 & §13.
+
 ---
 
 ## 13. Domain notes: Ukrainian customs (to be verified)

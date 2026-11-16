@@ -143,3 +143,81 @@ For any input amount $A_{\text{CC}}$ in currency $\text{CC}$:
    - `PLN`: `10.50 UAH`
    - `GBP`: `53.00 UAH`
    - `UAH`: `1.00 UAH`
+
+---
+
+## 4. Passenger Car Import Tax Formulas
+
+**Legal basis:** Tax Code of Ukraine (ПКУ) Art. 215.3.5-1 (Laws #2611-VIII / #8487), Customs Code of Ukraine (МКУ).
+
+### 4.1 Scope & Inputs
+Applies to passenger vehicles (UKTZED heading `8703`) imported into Ukraine.
+
+| Input Field | Type | Description |
+|---|---|---|
+| `customs_value_eur` ($V_{\text{EUR}}$) | `Decimal` | Vehicle customs value in EUR (purchase price + delivery/insurance to Ukrainian border) |
+| `engine_type` | `enum` | `"petrol"` (бензин), `"diesel"` (дизель), or `"electric"` (електромобіль) |
+| `engine_volume_cm3` ($E_{\text{cm3}}$) | `int` | Engine displacement in $\text{cm}^3$ (required for `petrol` and `diesel`) |
+| `battery_capacity_kwh` ($B_{\text{kWh}}$) | `Decimal` | Traction battery capacity in kWh (required for `electric`) |
+| `production_year` ($Y_{\text{prod}}$) | `int` | Vehicle manufacturing year (used with `current_year` $Y_{\text{curr}}$, default `2026`, to compute $K_{\text{age}}$) |
+
+*(Note: Hybrid vehicles with an internal combustion engine are taxed under the `petrol` or `diesel` formulas using their ICE displacement $E_{\text{cm3}}$ unless classified strictly as pure electric `8703 80`.)*
+
+### 4.2 Customs Duty (Ввізне мито)
+- **Internal combustion vehicles (`petrol`, `diesel`):**
+  $$\text{Duty}_{\text{EUR}} = \text{round}_2(0.10 \times V_{\text{EUR}})$$
+  *(Note: Preferential EU EUR.1 certificate rates may reduce duty for qualifying EU-origin vehicles, but the statutory 10% rate is the MVP baseline used in calculations and the pitch.)*
+- **Electric vehicles (`electric`, UKTZED `8703 80`):**
+  $$\text{Duty}_{\text{EUR}} = 0.00$$
+
+### 4.3 Excise Tax (Акцизний податок — ПКУ Art. 215.3.5-1)
+
+#### Petrol & Diesel Cars
+$$\text{Excise}_{\text{EUR}} = \text{round}_2\big(R_{\text{base}} \times K_{\text{engine}} \times K_{\text{age}}\big)$$
+
+where:
+1. **Engine volume coefficient ($K_{\text{engine}}$):**
+   $$K_{\text{engine}} = \frac{E_{\text{cm3}}}{1000}$$
+2. **Base rate ($R_{\text{base}}$ in EUR per $1000\text{ cm}^3$):**
+
+| `engine_type` | Displacement condition | $R_{\text{base}}$ |
+|---|---|---|
+| `petrol` | $E_{\text{cm3}} \le 3000\text{ cm}^3$ | `50.00 EUR` |
+| `petrol` | $E_{\text{cm3}} > 3000\text{ cm}^3$ | `100.00 EUR` |
+| `diesel` | $E_{\text{cm3}} \le 3500\text{ cm}^3$ | `75.00 EUR` |
+| `diesel` | $E_{\text{cm3}} > 3500\text{ cm}^3$ | `150.00 EUR` |
+
+3. **Age coefficient ($K_{\text{age}}$):**  
+   Statutory Ukrainian rule counts full calendar years from the year **following** manufacture up to the year of customs clearance, with a minimum of `1` (for new and 1-year-old vehicles) and a maximum cap of `15`:
+   $$K_{\text{age}} = \min\Big(15,\; \max\big(1,\; Y_{\text{curr}} - Y_{\text{prod}} - 1\big)\Big)$$
+   *(Deterministic API contract option: if the caller or unit test supplies `age_years` directly, apply $K_{\text{age}} = \min(15, \max(1, \text{age\_years}))$; when only `production_year` is given, use $Y_{\text{curr}} - Y_{\text{prod}} - 1$ clamped to $[1, 15]$.)*
+
+#### Electric Vehicles (`electric`)
+Statutory excise rate is **€1.00 per 1 kWh** of traction battery capacity:
+$$\text{Excise}_{\text{EUR}} = \text{round}_2(1.00 \times B_{\text{kWh}})$$
+
+### 4.4 Value Added Tax (ПДВ — 20%)
+$$\text{VAT}_{\text{EUR}} = \text{round}_2\Big(0.20 \times \big(V_{\text{EUR}} + \text{Duty}_{\text{EUR}} + \text{Excise}_{\text{EUR}}\big)\Big)$$
+
+- **EV VAT note (2026):** As of **1 January 2026**, the transitional VAT exemption for electric vehicles (ПКУ Subsection 2, Section XX, sub-clause 64) expired, so standard **20% VAT** applies to $(V_{\text{EUR}} + \text{Excise}_{\text{EUR}})$ in 2026. Historical 0% EV VAT applied only through 31 December 2025.
+
+### 4.5 Total Tax & Total Landed Price
+$$\text{Total Tax}_{\text{EUR}} = \text{Duty}_{\text{EUR}} + \text{Excise}_{\text{EUR}} + \text{VAT}_{\text{EUR}}$$
+$$\text{Total Landed Price}_{\text{EUR}} = V_{\text{EUR}} + \text{Total Tax}_{\text{EUR}}$$
+
+### 4.6 Pitch Consistency Check (`€10,000 car → €2,048–€4,640 in taxes`)
+- **Lower bound (`€2,048.00`) — Electric car (`€10,000`, `40 kWh` battery):**
+  - $\text{Duty} = 0.00\text{ EUR}$
+  - $\text{Excise} = 1.00 \times 40 = 40.00\text{ EUR}$
+  - $\text{VAT} = 0.20 \times (10000 + 0 + 40) = 2008.00\text{ EUR}$
+  - $\text{Total Tax} = \mathbf{2,048.00\text{ EUR}}$ ✔
+- **Mid ICE example (`€3,296.00`) — Petrol car (`€10,000`, $1600\text{ cm}^3$, $K_{\text{age}} = 1$):**
+  - $\text{Duty} = 0.10 \times 10000 = 1000.00\text{ EUR}$
+  - $\text{Excise} = 50 \times 1.6 \times 1 = 80.00\text{ EUR}$
+  - $\text{VAT} = 0.20 \times (10000 + 1000 + 80) = 2216.00\text{ EUR}$
+  - $\text{Total Tax} = \mathbf{3,296.00\text{ EUR}}$ ✔
+- **Upper bound (`€4,640.00`) — Diesel car (`€10,000`, $2000\text{ cm}^3$, $K_{\text{age}} = 8$):**
+  - $\text{Duty} = 0.10 \times 10000 = 1000.00\text{ EUR}$
+  - $\text{Excise} = 75 \times 2.0 \times 8 = 1200.00\text{ EUR}$
+  - $\text{VAT} = 0.20 \times (10000 + 1000 + 1200) = 2440.00\text{ EUR}$
+  - $\text{Total Tax} = \mathbf{4,640.00\text{ EUR}}$ ✔
