@@ -173,7 +173,11 @@ PidKlyuch/
     │   ├── core/security.py     # PBKDF2 password hashing, JWT encode/decode
     │   ├── models/              # SQLAlchemy ORM models: user.py (User)
     │   ├── services/            # business services: auth_service.py (AuthService: register/authenticate)
-    │   └── customs/             # customs calculation engine (pure Python, no DB/HTTP)
+    │   └── customs/             # customs calculation engine (pure Python, no DB/HTTP), all amounts in EUR
+    │       ├── rules.py         # ParcelRules/CarRules dataclasses + PARCEL_CURRENT, PARCEL_JULY_2027, CAR_CURRENT
+    │       │                    #   → THE ONLY place with tax rates/thresholds; edit numbers here
+    │       ├── models.py        # ParcelInput, CarInput, TaxLine, Breakdown (totals), money() rounding, enums
+    │       └── calculators.py   # CustomsCalculator (ABC) → ParcelCalculator, CarCalculator (Strategy pattern)
     └── tests/                   # pytest; conftest.py sets a test SQLite DB + fresh tables per test
 ```
 
@@ -308,6 +312,11 @@ Format: `YYYY-MM-DD: decision: reason (who)`
   Postgres in prod. (Liubomyr + Claude Code)
 - 2026-11-16: Money in API responses is a string with 2 decimals, and internally it is `decimal.Decimal`. Reason: avoid
   float rounding errors in tax math. (Liubomyr + Claude Code)
+- 2026-11-16: Customs engine = Strategy pattern (`CustomsCalculator` → `ParcelCalculator`, `CarCalculator`) with
+  rules injected as immutable `ParcelRules`/`CarRules` objects. Reason: "today vs July 2027" is just a different
+  rules object, new delivery types (luggage) are a new class, and rates change in one file. The engine works only
+  in EUR; currency conversion happens in the service layer. Lines are rounded to cents with ROUND_HALF_UP.
+  (Liubomyr + Claude Code)
 - 2026-11-16: Work happens on branch `liubomyr/backend`; it gets merged into `main` when the backend MVP is ready. (Liubomyr)
 
 ---
@@ -382,6 +391,22 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **How to verify / run:** `cd backend && .venv/bin/pytest tests/test_auth.py`
 - **Not done / known problems / next steps:** no password reset or email verification (out of scope for the demo).
 
+
+### 2026-11-16: Customs calculation engine (parcels + cars)
+- **Who:** Liubomyr Voskalo via Claude Code (Opus 5.5)
+- **Area:** backend
+- **What was done:** Added the pure-Python customs engine in `backend/app/customs/`: rule sets (current parcel,
+  July 2027 parcel, current car), value objects, and `ParcelCalculator` / `CarCalculator`. These return a `Breakdown`
+  with itemized `TaxLine`s (duty/excise/vat), each with a human-readable formula in Ukrainian, plus notes and totals.
+  Formulas are documented in §13.
+- **Files touched:** created `backend/app/customs/{rules.py,models.py,calculators.py}`,
+  `backend/tests/test_customs.py` (21 tests); modified `AGENTS.md` (§6, §10, §12, §13).
+- **Decisions & why:** see §10 (Strategy pattern, EUR-only engine).
+- **How to verify / run:** `cd backend && .venv/bin/pytest tests/test_customs.py`. The tests reproduce the pitch
+  numbers: €16 for a €200 parcel, and €2,048 / €4,640 for a €10,000 car.
+- **Not done / known problems / next steps:** not exposed over HTTP yet (next: NBU rates + `/api/calculate`). The
+  rates still need Anton's verification (see the open questions in §13).
+
 ---
 
 ## 13. Domain notes: Ukrainian customs (to be verified)
@@ -396,11 +421,20 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - Pitch consistency check: €200 parcel → excess €50 → duty €5 → VAT 20% × €55 = €11 → **total ≈ €16** ✔
 - **July 2027 change (from the pitch):** VAT applies to every imported parcel (no threshold for VAT). Exact
   rules (e.g. whether duty is still threshold-based) must be confirmed.
+- **Implemented as** `PARCEL_CURRENT` and `PARCEL_JULY_2027` in `backend/app/customs/rules.py`. Assumptions: shipping
+  is NOT counted toward the €150 limit; in 2027 the duty is still 10% above €150, and VAT is 20% × (goods + duty).
 
-**Cars:** taxes are customs duty + excise + VAT. Excise depends on engine type, engine volume, and car age, and
-VAT is charged on (customs value + duty + excise). The duty rate may depend on country of origin (EU vs. non-EU).
-Exact formulas and rates are **not filled in yet**. The pitch's reference point is a €10,000 car → €2,048–€4,640
-in taxes, which can serve as a sanity check for test cases.
+**Cars (implemented in `backend/app/customs/rules.py` → `CAR_CURRENT`, still needs verification by Anton):**
+- Customs value = car price + delivery to the Ukrainian border.
+- Duty: **10%** of the customs value for non-EU origin, **0%** for EU origin (DCFTA; verify the current rate).
+- Excise: petrol €50 per litre of engine volume (≤3000 cm³) or €100 (>3000 cm³); diesel €75 (≤3500 cm³) or €150
+  (>3500 cm³); then × the **age coefficient** = current year − manufacture year, clamped to 1..15.
+  Hybrid: flat €100. Electric: €1 per kWh of battery.
+- VAT **20%** × (customs value + duty + excise).
+- Pitch consistency checks (both covered by unit tests): non-EU petrol 2.0 l from 2014, €10,000 → **€4,640** ✔;
+  EU-origin new petrol 0.8 l, €10,000 → **€2,048** ✔.
+- Open questions for Anton: the current EU-origin duty rate; whether EVs still have a duty/VAT exemption; whether
+  the age coefficient uses calendar years or full years since the manufacture date.
 
 **Exchange rates:** National Bank of Ukraine (NBU) official daily rates. The public NBU API returns JSON. Cache the
 rates daily and keep a fallback if the API is down.
