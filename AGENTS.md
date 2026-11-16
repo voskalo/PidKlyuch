@@ -156,12 +156,14 @@ Current state (update on every structural change):
 PidKlyuch/
 ├── infra/
 │   ├── hello-world/
-│   │   └── index.html  # Day 1 static status/landing page for HTTPS smoke test
-│   ├── Dockerfile      # lightweight caddy:2-alpine static server image for hello-world
-│   └── README.md       # deployment architecture, prerequisites, run & HTTPS deploy instructions
-├── AGENTS.md           # this file: shared AI context + work log (read first, update last)
-├── CLAUDE.md           # pointer so Claude Code auto-loads AGENTS.md
-└── README.md           # public description, team division of work, run & deploy instructions
+│   │   └── index.html      # Day 1 static status/landing page for HTTPS smoke test
+│   ├── Caddyfile           # Caddy v2 reverse proxy config with automatic HTTPS and /healthz
+│   ├── Dockerfile          # lightweight caddy:2-alpine static server image for hello-world
+│   ├── docker-compose.yml  # Docker Compose stack (caddy + hello) with ports 80/443 & volumes
+│   └── README.md           # deployment architecture, prerequisites, run & HTTPS deploy instructions
+├── AGENTS.md               # this file: shared AI context + work log (read first, update last)
+├── CLAUDE.md               # pointer so Claude Code auto-loads AGENTS.md
+└── README.md               # public description, team division of work, run & deploy instructions
 ```
 
 Planned (required by grading):
@@ -180,7 +182,10 @@ PidKlyuch/
 
 ## 7. Environment variables
 
-None yet. Format: `NAME`: where it is used, example value (never a real secret), required or optional.
+Format: `NAME`: where it is used, example value (never a real secret), required or optional.
+
+- `DOMAIN`: `infra/docker-compose.yml` & `infra/Caddyfile` (site block host for automatic HTTPS), example `pidklyuch.example.com` or `localhost`, optional (defaults to `localhost`).
+- `ACME_EMAIL`: `infra/docker-compose.yml` & `infra/Caddyfile` (Let's Encrypt / ACME notification email), example `admin@example.com`, optional (defaults to `admin@example.com`).
 
 ---
 
@@ -219,8 +224,8 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 ## 11. Open issues / TODO
 
 - [ ] Choose the tech stack and fill in §5 (all, Mon 16 Nov).
-- [ ] Create `backend/`, `frontend/`, `infra/` skeletons (each owner).
-- [ ] Deploy a "hello world" over HTTPS on day 1 to find hosting problems early (Anton).
+- [ ] Create `backend/`, `frontend/`, `infra/` skeletons (`infra/` done by Anton; `backend/`, `frontend/` pending).
+- [ ] Deploy a "hello world" over HTTPS on day 1 to find hosting problems early (compose + Caddy config ready in `infra/`; live VPS deploy pending hosting choice).
 - [ ] Write the API contract in §8 (Liubomyr).
 - [ ] Write `docs/customs-rules.md` with verified rules, sources, and test cases (Anton).
 - [ ] Fill in "How to run" and "How to deploy" in `README.md` (Anton, with input from both other owners).
@@ -271,6 +276,15 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **Decisions & why:** Used `caddy:2-alpine` with explicit `caddy file-server` on port 80 so the container stays lightweight and shares the same base image family as the reverse proxy.
 - **How to verify / run:** `docker build -t pidklyuch-hello ./infra` (full compose verification after Step 3).
 - **Not done / known problems / next steps:** Still need `infra/Caddyfile`, `infra/docker-compose.yml`, and `docs/customs-rules.md`.
+
+### 2026-11-16 13:37: Add Caddyfile and docker-compose for HTTPS deploy
+- **Who:** Anton Vertyporokh via Antigravity CLI
+- **Area:** infra
+- **What was done:** Verified Caddy v2 Caddyfile & Docker Compose syntax via `context7` (`/websites/caddyserver_caddyfile`, `/caddyserver/caddy-docker`). Created `infra/Caddyfile` (global `email`, `{$DOMAIN:localhost}` site block, `encode zstd gzip`, `/healthz` responder, `reverse_proxy hello:80`, and Day 2+ commented placeholders for `/api/*` and `/*`) and `infra/docker-compose.yml` (`caddy:2-alpine` mapping ports 80/443/443udp with `caddy_data` & `caddy_config` volumes + `hello` service). Updated `AGENTS.md` §6, §7, and §11.
+- **Files touched:** `infra/Caddyfile` (created), `infra/docker-compose.yml` (created), `AGENTS.md` (modified)
+- **Decisions & why:** Used `{$DOMAIN:localhost}` and `{$ACME_EMAIL:admin@example.com}` Caddyfile env-var placeholders so the same compose stack works for local HTTPS smoke-testing and live VPS deployment without editing config files.
+- **How to verify / run:** `DOMAIN=localhost docker compose -f infra/docker-compose.yml up --build` then visit `https://localhost` and `https://localhost/healthz`.
+- **Not done / known problems / next steps:** Live VPS deployment still pending host selection; next step is writing `docs/customs-rules.md`.
 
 ---
 
