@@ -154,6 +154,8 @@ Current state (update on every structural change):
 
 ```
 PidKlyuch/
+├── docs/
+│   └── customs-rules.md    # Ukrainian customs rules spec (parcels, cars, NBU rates, test cases)
 ├── infra/
 │   ├── hello-world/
 │   │   └── index.html      # Day 1 static status/landing page for HTTPS smoke test
@@ -285,6 +287,15 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **Decisions & why:** Used `{$DOMAIN:localhost}` and `{$ACME_EMAIL:admin@example.com}` Caddyfile env-var placeholders so the same compose stack works for local HTTPS smoke-testing and live VPS deployment without editing config files.
 - **How to verify / run:** `DOMAIN=localhost docker compose -f infra/docker-compose.yml up --build` then visit `https://localhost` and `https://localhost/healthz`.
 - **Not done / known problems / next steps:** Live VPS deployment still pending host selection; next step is writing `docs/customs-rules.md`.
+
+### 2026-11-16 13:39: Initialize customs-rules.md with current parcel rules
+- **Who:** Anton Vertyporokh via Antigravity CLI
+- **Area:** docs
+- **What was done:** Created `docs/customs-rules.md` with precision/rounding rules (`Decimal`, `ROUND_HALF_UP` to 2 decimals), official Ukrainian legal/API sources (МКУ, ПКУ, customs.gov.ua, tax.gov.ua, NBU JSON API), and Section 1 covering current parcel import rules (€150 duty-free threshold, 10% duty + 20% VAT on excess, landed price formula, and €200 parcel check). Updated `AGENTS.md` §6.
+- **Files touched:** `docs/customs-rules.md` (created), `AGENTS.md` (modified)
+- **Decisions & why:** Standardized on `ROUND_HALF_UP` at each tax line item (`duty`, `excise`, `vat`) and EUR as threshold base with NBU UAH conversion so backend unit tests and frontend breakdowns match exactly.
+- **How to verify / run:** Review `docs/customs-rules.md` §1; €200 parcel yields €5.00 duty + €11.00 VAT = €16.00 total tax.
+- **Not done / known problems / next steps:** Add July 2027 parcel rules, NBU rate conversion/fallback specs, car tax formulas, and 10 worked test cases to `docs/customs-rules.md`.
 
 ---
 
