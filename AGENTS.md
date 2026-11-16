@@ -17,7 +17,7 @@
 | Course | OOAD (OOP), 2nd year, university team project |
 | Team | Liubomyr Voskalo, Anna Kravchenko, Anton Vertyporoh |
 | **Deadline** | **Thursday 19 November 2026 (Module 11)**: live demo + submission |
-| Current phase | Day 1: **backend MVP done** on branch `liubomyr/backend` (all §8 endpoints ✅, 43 tests, not deployed yet); frontend and infra not started |
+| Current phase | Day 1: **backend MVP done** on branch `liubomyr/backend` (all §8 endpoints ✅, customs rates verified against the law 16.11, 66 tests, not deployed yet); frontend and infra not started |
 | Tech stack | Backend: Python/FastAPI + SQLAlchemy. **Hosting: AWS (all parts).** Frontend: TBD (see §5) |
 | Live demo URL | TBD (must be HTTPS) |
 | Repo URL | https://github.com/voskalo/PidKlyuch (`main` has only the docs; backend is on the local branch `liubomyr/backend`, **not pushed yet**) |
