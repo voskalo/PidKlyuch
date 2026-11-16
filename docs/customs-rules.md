@@ -72,3 +72,74 @@ For a parcel with goods value $V_{\text{EUR}} = 200.00\text{ EUR}$:
 - $\text{Duty} = 0.10 \times 50.00 = 5.00\text{ EUR}$
 - $\text{VAT} = 0.20 \times (50.00 + 5.00) = 0.20 \times 55.00 = 11.00\text{ EUR}$
 - $\text{Total Tax} = 5.00 + 11.00 = \mathbf{16.00\text{ EUR}}$ ✔
+
+---
+
+## 2. Upcoming July 2027 Parcel Import Rules (VAT Threshold Abolition)
+
+**Context:** Ukrainian tax reform aligning cross-border e-commerce imports with EU Council Directive 2017/2455 (IOSS / import VAT framework) and the PidKlyuch pitch specification taking effect **July 2027**.
+
+### 2.1 Key Change vs. Today's Rules
+- The **€150 VAT-free threshold is abolished**: mandatory **20% VAT** applies to **every** imported parcel starting from **€0.01**.
+- Under the MVP specification, **Customs Duty (10%)** remains governed by the €150 threshold on the excess over €150 (subject to final enacted wording — see `TODO` items below).
+
+### 2.2 Formulas (July 2027 Rules)
+
+#### Case A: $V_{\text{EUR}} \le 150.00\text{ EUR}$
+$$\text{Duty}_{2027} = 0.00$$
+$$\text{VAT}_{2027} = \text{round}_2(0.20 \times V_{\text{EUR}})$$
+$$\text{Total Tax}_{2027} = \text{VAT}_{2027}$$
+$$\text{Total Landed Price}_{2027} = V_{\text{EUR}} + S_{\text{EUR}} + \text{Total Tax}_{2027}$$
+
+#### Case B: $V_{\text{EUR}} > 150.00\text{ EUR}$ (up to $10,000\text{ EUR}$)
+$$\text{Excess}_{\text{EUR}} = V_{\text{EUR}} - 150.00$$
+$$\text{Duty}_{2027} = \text{round}_2(0.10 \times \text{Excess}_{\text{EUR}})$$
+$$\text{VAT}_{2027} = \text{round}_2\big(0.20 \times (V_{\text{EUR}} + \text{Duty}_{2027})\big)$$
+$$\text{Total Tax}_{2027} = \text{Duty}_{2027} + \text{VAT}_{2027}$$
+$$\text{Total Landed Price}_{2027} = V_{\text{EUR}} + S_{\text{EUR}} + \text{Total Tax}_{2027}$$
+
+*(Comparison note: For a €200.00 parcel, today's tax is `€5.00 + €11.00 = €16.00`, whereas under July 2027 rules duty stays `€5.00` and VAT jumps to `0.20 × (€200.00 + €5.00) = €41.00`, giving `€46.00` total tax — a `€30.00` increase because the initial €150 is no longer VAT-exempt.)*
+
+### 2.3 Open Edge Cases (`TODO: Legal Verification`)
+- **`TODO 1 (Legal Verification)` — Shipping inside sub-€150 VAT base:** Verify in the final enacted Verkhovna Rada bill whether international shipping ($S_{\text{EUR}}$) is included in the 20% VAT taxable base for B2C parcels $\le 150\text{ EUR}$, or whether VAT applies solely to the intrinsic value of goods ($V_{\text{EUR}}$) + duty. *MVP default:* tax $V_{\text{EUR}} + \text{Duty}_{2027}$ so the "Today vs. July 2027" comparison isolates the removal of the €150 VAT threshold cleanly.
+- **`TODO 2 (Legal Verification)` — Duty threshold & C2C gifts:** Confirm whether 10% customs duty above €150 remains strictly on the excess ($V_{\text{EUR}} - 150$) or shifts to the full value above €150, and whether non-commercial C2C private gifts retain a €45 exemption threshold.
+
+---
+
+## 3. Currency Conversion & NBU Daily Exchange Rates
+
+**Official source:** National Bank of Ukraine (NBU) public JSON API:
+```http
+GET https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json
+```
+
+Optional date parameter for deterministic lookups/debugging: `?valcode=EUR&date=YYYYMMDD&json`.
+
+### 3.1 Response Payload Structure
+Each item in the JSON array contains:
+- `r030` (int): ISO 4217 numeric code (e.g., `978` for EUR, `840` for USD)
+- `txt` (string): Ukrainian currency name
+- `rate` (number): Official exchange rate in **UAH per 1 unit** of foreign currency
+- `cc` (string): 3-letter ISO 4217 alphabetic code (`EUR`, `USD`, `PLN`, `GBP`, etc.)
+- `exchangedate` (string): Effective date (`DD.MM.YYYY`)
+
+### 3.2 Conversion Formulas
+Let $\text{rate}(\text{CC})$ be the NBU official rate for currency $\text{CC}$ converted to `Decimal`, with $\text{rate}(\text{UAH}) = 1.0$.
+
+For any input amount $A_{\text{CC}}$ in currency $\text{CC}$:
+1. **Convert to UAH (statutory settlement currency):**
+   $$A_{\text{UAH}} = \text{round}_2\big(A_{\text{CC}} \times \text{rate}(\text{CC})\big)$$
+2. **Convert to EUR (statutory threshold & car excise currency):**
+   $$A_{\text{EUR}} = \begin{cases} A_{\text{CC}}, & \text{if } \text{CC} = \text{EUR} \\ \text{round}_2\left(\dfrac{A_{\text{CC}} \times \text{rate}(\text{CC})}{\text{rate}(\text{EUR})}\right), & \text{otherwise} \end{cases}$$
+
+*(Implementation note: Perform cross-currency conversion $\text{CC} \to \text{UAH} \to \text{EUR}$ without premature intermediate rounding if exact precision is needed, or round $A_{\text{EUR}}$ to 2 decimal places `ROUND_HALF_UP` before applying thresholds; test cases in §5 use exact terminating ratios so both orders agree.)*
+
+### 3.3 Caching & Fallback Specification (`backend/`)
+1. **Tier 1 — Live NBU Fetch + Daily Cache:** Fetch rates from the NBU endpoint (HTTP timeout $\le 3\text{ s}$) and cache them in memory + database keyed by Kyiv date (`YYYY-MM-DD`, timezone `Europe/Kyiv`), refreshing once per day (or TTL 6 hours). Return `rate_source: "nbu_live"` (or `"nbu_cached"` when served from today's fresh cache).
+2. **Tier 2 — Stale DB Cache Fallback:** If the NBU API is unreachable, returns non-200, or times out, serve the most recent persisted rate snapshot from the database and return `rate_source: "nbu_stale_cache"` alongside `rate_date`.
+3. **Tier 3 — Static Cold-Start Fallback:** If the NBU API fails and no database snapshot exists yet, use the static baseline constants below and return `rate_source: "fallback"` so the frontend displays a warning banner:
+   - `EUR`: `45.00 UAH`
+   - `USD`: `41.50 UAH`
+   - `PLN`: `10.50 UAH`
+   - `GBP`: `53.00 UAH`
+   - `UAH`: `1.00 UAH`

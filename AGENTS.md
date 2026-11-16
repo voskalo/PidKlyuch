@@ -297,6 +297,15 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **How to verify / run:** Review `docs/customs-rules.md` §1; €200 parcel yields €5.00 duty + €11.00 VAT = €16.00 total tax.
 - **Not done / known problems / next steps:** Add July 2027 parcel rules, NBU rate conversion/fallback specs, car tax formulas, and 10 worked test cases to `docs/customs-rules.md`.
 
+### 2026-11-16 13:40: Add July 2027 parcel rules and NBU rate specs
+- **Who:** Anton Vertyporokh via Antigravity CLI
+- **Area:** docs
+- **What was done:** Appended Section 2 (upcoming July 2027 parcel rules removing the €150 VAT threshold, formulas for `<= €150` and `> €150`, and `TODO` legal-verification markers for shipping-in-VAT-base and duty/C2C edge cases) and Section 3 (NBU daily exchange rate API spec, `CC -> UAH -> EUR` conversion formulas, and 3-tier caching/fallback strategy with `rate_source` flags) to `docs/customs-rules.md`. Updated `AGENTS.md` §12.
+- **Files touched:** `docs/customs-rules.md` (modified), `AGENTS.md` (modified)
+- **Decisions & why:** Defined a 3-tier NBU rate fallback (`nbu_live`/`nbu_cached` -> `nbu_stale_cache` -> static `fallback` constants) and defaulted July 2027 VAT base to `V_EUR + Duty_2027` (with explicit legal-verification TODO) so "Today vs. July 2027" comparisons stay deterministic and transparent.
+- **How to verify / run:** Review `docs/customs-rules.md` §2–§3; verify €200 parcel gives €16.00 today vs. €46.00 under July 2027 rules.
+- **Not done / known problems / next steps:** Add Section 4 (car import tax formulas) and Section 5 (10 worked test cases) to `docs/customs-rules.md`.
+
 ---
 
 ## 13. Domain notes: Ukrainian customs (to be verified)
