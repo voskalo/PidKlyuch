@@ -89,8 +89,36 @@ AGENTS.md   Shared context and work log for AI agents: read first, update after 
 
 ## How to run locally
 
-_TBD: filled in once the stack is chosen (prerequisites, env vars from `.env.example`, commands for backend and frontend)._
+### Backend (Python 3.12+)
+
+```bash
+cd backend
+python3 -m venv .venv
+.venv/bin/pip install -r requirements-dev.txt
+cp .env.example .env            # defaults work locally (SQLite file pidklyuch.db)
+.venv/bin/uvicorn app.main:app --reload
+```
+
+- API: http://localhost:8000/api/health
+- Interactive API docs (try every endpoint): http://localhost:8000/docs
+- Tests: `.venv/bin/pytest`
+- With Docker instead: `docker build -t pidklyuch-backend backend && docker run -p 8000:8000 pidklyuch-backend`
+
+The API endpoints and the request/response formats are described in [`AGENTS.md`](AGENTS.md) §8.
+
+### Frontend
+
+_TBD (Anna)._
 
 ## How to deploy
 
-_TBD: hosting provider, how HTTPS is set up, deploy commands, required environment variables._
+_TBD (Anton): hosting provider, how HTTPS is set up, deploy commands._
+
+The backend is a single Docker image (`backend/Dockerfile`, listens on `$PORT`) and needs these environment
+variables in production:
+
+| Variable | Example |
+|---|---|
+| `DATABASE_URL` | `postgres://user:pass@host:5432/pidklyuch` (Postgres; `postgres://` URLs are accepted) |
+| `JWT_SECRET` | a long random string: `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
+| `CORS_ORIGINS` | the HTTPS URL of the frontend, e.g. `https://pidklyuch.example.com` |

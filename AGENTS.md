@@ -17,7 +17,7 @@
 | Course | OOAD (OOP), 2nd year, university team project |
 | Team | Liubomyr Voskalo, Anna Kravchenko, Anton Vertyporoh |
 | **Deadline** | **Thursday 19 November 2026 (Module 11)**: live demo + submission |
-| Current phase | Day 1: backend in progress on branch `liubomyr/backend`; frontend and infra not started |
+| Current phase | Day 1: **backend MVP done** on branch `liubomyr/backend` (all §8 endpoints ✅, 43 tests, not deployed yet); frontend and infra not started |
 | Tech stack | Backend: Python/FastAPI + SQLAlchemy (see §5). Frontend and hosting: TBD |
 | Live demo URL | TBD (must be HTTPS) |
 | Repo URL | TBD |
@@ -112,7 +112,7 @@ Submit:
 | Criterion | Points | Status |
 |---|---|---|
 | Repo organised with top-level `backend/`, `frontend/`, `infra/` and a `README.md` that tells a stranger what the product is and how to run and deploy it | 3 | ⬜ |
-| Working prototype with sign-in: deployed, reachable over **HTTPS**, users can **sign up and sign in** | 3 | ⬜ |
+| Working prototype with sign-in: deployed, reachable over **HTTPS**, users can **sign up and sign in** | 3 | 🟡 backend auth done, not deployed yet; no UI |
 | Report with user feedback: who you showed it to, how many tried it, what they said, **what you changed because of it** | 4 | ⬜ |
 | **Bonus:** users ready to pay real money (donation to a volunteer cause, or a working payment in the product), with **evidence in the report** | bonus | ⬜ |
 
@@ -162,10 +162,11 @@ PidKlyuch/
     ├── requirements.txt         # runtime deps (pinned)
     ├── requirements-dev.txt     # + pytest
     ├── .env.example             # documented env vars (copy to .env)
+    ├── Dockerfile               # python:3.12-slim, runs uvicorn on $PORT (default 8000); build context = backend/
     ├── app/
     │   ├── main.py              # create_app(): CORS, routers, DB init on startup
     │   ├── core/config.py       # Settings (pydantic-settings, reads env/.env)
-    │   ├── core/database.py     # engine, SessionLocal, Base, get_db(), init_db()
+    │   ├── core/database.py     # engine, SessionLocal, Base, get_db(), init_db(), normalize_db_url()
     │   ├── api/health.py        # GET /api/health
     │   ├── api/auth.py          # /api/auth/signup|signin|me
     │   ├── api/schemas_auth.py  # pydantic request/response models for auth
@@ -173,11 +174,13 @@ PidKlyuch/
     │   ├── core/security.py     # PBKDF2 password hashing, JWT encode/decode
     │   ├── api/calculate.py     # POST /api/calculate, POST /api/calculate/compare-rules, GET /api/rates
     │   ├── api/schemas_calc.py  # ParcelIn/CarIn (discriminated by delivery_type), CalculationOut, RatesOut
-    │   ├── models/              # SQLAlchemy ORM models: user.py (User)
+    │   ├── api/history.py       # GET /api/history, DELETE /api/history/{id}, GET /api/stats
+    │   ├── models/              # SQLAlchemy ORM models: user.py (User), calculation.py (Calculation: input/result JSON)
     │   ├── services/            # business services (use cases)
     │   │   ├── auth_service.py        # AuthService: register/authenticate
     │   │   ├── rates_service.py       # RatesService: NBU fetch, 1h cache, fallback; RateTable.to_eur()
-    │   │   └── calculation_service.py # CalculationService: request → EUR → calculator → response with UAH
+    │   │   ├── calculation_service.py # CalculationService: request → EUR → calculator → response with UAH
+    │   │   └── history_service.py     # HistoryService: record / list_for / delete_for / stats
     │   └── customs/             # customs calculation engine (pure Python, no DB/HTTP), all amounts in EUR
     │       ├── rules.py         # ParcelRules/CarRules dataclasses + PARCEL_CURRENT, PARCEL_JULY_2027, CAR_CURRENT
     │       │                    #   → THE ONLY place with tax rates/thresholds; edit numbers here
@@ -230,9 +233,9 @@ Money in responses is a **string with 2 decimals** (e.g. `"16.00"`), so no float
 | ✅ | POST | `/api/calculate` | optional | calculate landed price; saved to history if signed in |
 | ✅ | POST | `/api/calculate/compare-rules` | – | parcel: current rules vs July 2027 rules |
 | ✅ | GET | `/api/rates` | – | NBU rates used for conversion |
-| ⬜ | GET | `/api/history` | required | user's saved calculations, newest first |
-| ⬜ | DELETE | `/api/history/{id}` | required | delete one saved calculation |
-| ⬜ | GET | `/api/stats` | – | aggregate counters for the report |
+| ✅ | GET | `/api/history` | required | user's saved calculations, newest first |
+| ✅ | DELETE | `/api/history/{id}` | required | delete one saved calculation |
+| ✅ | GET | `/api/stats` | – | aggregate counters for the report |
 
 **Sign-out** is client-side: delete the stored token (JWT is stateless).
 
@@ -286,6 +289,10 @@ a car missing `engine_volume_cc` / `battery_kwh` contains the reason in `detail[
 **GET /api/rates** → `{"date": "2026-11-16", "source": "nbu" | "fallback", "uah_per_unit": {"EUR": "48.12", "USD": "41.50", ...}}`
 
 **GET /api/history** → `[{"id", "created_at", "delivery_type", "input": {...request body...}, "result": {...response...}}]`
+(at most 100, newest first; numbers inside `input` come back as strings, e.g. `"item_price": "200"`)
+
+Note: **every** `/api/calculate` call is stored in the DB (anonymous ones with `user_id = NULL`) so `/api/stats`
+can count usage. Only signed-in users see their own calculations in `/api/history`. `compare-rules` is not stored.
 
 **DELETE /api/history/{id}** → `204`. `404` if the item doesn't exist or isn't yours.
 
@@ -325,6 +332,8 @@ Format: `YYYY-MM-DD: decision: reason (who)`
   rules object, new delivery types (luggage) are a new class, and rates change in one file. The engine works only
   in EUR; currency conversion happens in the service layer. Lines are rounded to cents with ROUND_HALF_UP.
   (Liubomyr + Claude Code)
+- 2026-11-16: All calculations are persisted, including anonymous ones, to get real usage numbers for the report
+  (`/api/stats`). "Returning user" = a user with calculations on 2 or more different UTC days. (Liubomyr + Claude Code)
 - 2026-11-16: Work happens on branch `liubomyr/backend`; it gets merged into `main` when the backend MVP is ready. (Liubomyr)
 
 ---
@@ -335,7 +344,12 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - [x] `backend/` skeleton. [ ] `frontend/`, `infra/` skeletons (Anna, Anton).
 - [ ] Deploy a "hello world" over HTTPS on day 1 to find hosting problems early (Anton). The backend already has `GET /api/health`.
 - [x] Write the API contract in §8 (Liubomyr).
-- [ ] Implement the backend endpoints marked ⬜ in §8 (Liubomyr).
+- [x] Implement the backend endpoints in §8 (Liubomyr).
+- [ ] Merge `liubomyr/backend` into `main` and push (Liubomyr).
+- [ ] Deploy the backend over HTTPS with Postgres. `backend/Dockerfile` is ready; set `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGINS` (Anton + Liubomyr).
+- [ ] The Docker image build was not verified (no Docker daemon on Liubomyr's machine on 16.11). Run `docker build backend` once.
+- [ ] Replace the assumed customs rates with verified ones in `backend/app/customs/rules.py` and add Anton's test cases to `backend/tests/test_customs.py` (Anton → Liubomyr).
+- [ ] Optional: rate limiting on auth endpoints, password reset (not needed for the demo).
 - [ ] Write `docs/customs-rules.md` with verified rules, sources, and test cases (Anton).
 - [ ] Fill in "How to run" and "How to deploy" in `README.md` (Anton, with input from both other owners).
 
@@ -434,6 +448,27 @@ Format: `YYYY-MM-DD: decision: reason (who)`
   try `POST /api/calculate` with the parcel example from §8.
 - **Not done / known problems / next steps:** calculations are not saved to history yet (`calculation_id` is always
   null); history and stats endpoints are next.
+
+
+### 2026-11-16: Calculation history, usage stats, deploy readiness
+- **Who:** Liubomyr Voskalo via Claude Code (Opus 5.5)
+- **Area:** backend
+- **What was done:** Added the `Calculation` model (input/result stored as JSON, nullable `user_id`) and
+  `HistoryService`. `POST /api/calculate` now stores every calculation and returns `calculation_id` for signed-in
+  users. Added `GET /api/history`, `DELETE /api/history/{id}` (owner only, 404 otherwise), and `GET /api/stats`
+  (users, calculations, calculations_by_signed_in, returning_users) for the report. Added `normalize_db_url()`
+  (accepts the `postgres://` URLs that hosting providers give), a backend `Dockerfile` + `.dockerignore`, and the
+  backend run instructions in `README.md`. Smoke-tested with a real uvicorn and the live NBU API: sign-up →
+  calculate in USD → history → stats all work.
+- **Files touched:** created `backend/app/models/calculation.py`, `backend/app/services/history_service.py`,
+  `backend/app/api/history.py`, `backend/tests/test_history.py`, `backend/Dockerfile`, `backend/.dockerignore`;
+  modified `backend/app/api/calculate.py`, `backend/app/models/__init__.py`, `backend/app/core/database.py`,
+  `backend/app/main.py`, `README.md`, `AGENTS.md`.
+- **Decisions & why:** see §10 (store all calculations; definition of a returning user).
+- **How to verify / run:** `cd backend && .venv/bin/pytest` (43 passed); `.venv/bin/uvicorn app.main:app --reload` → http://localhost:8000/docs
+- **Not done / known problems / next steps:** not deployed; Docker build not verified locally; no DB migrations
+  (tables are auto-created, so a schema change on prod requires a manual ALTER or a fresh DB); customs rates
+  are unverified. See §11.
 
 ---
 

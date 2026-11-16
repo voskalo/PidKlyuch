@@ -1,7 +1,12 @@
 from fastapi import APIRouter, Body, Depends
+from sqlalchemy.orm import Session
 
+from app.api.deps import get_optional_user
 from app.api.schemas_calc import CalculationIn, CalculationOut, CompareRulesOut, ParcelIn, RatesOut
+from app.core.database import get_db
+from app.models import User
 from app.services.calculation_service import CalculationService
+from app.services.history_service import HistoryService
 from app.services.rates_service import RatesService, get_rates_service
 
 router = APIRouter(tags=["calculate"])
@@ -11,8 +16,16 @@ router = APIRouter(tags=["calculate"])
 def calculate(
     body: CalculationIn = Body(...),
     rates: RatesService = Depends(get_rates_service),
+    user: User | None = Depends(get_optional_user),
+    db: Session = Depends(get_db),
 ) -> CalculationOut:
-    return CalculationService(rates.get_rates()).calculate(body)
+    result = CalculationService(rates.get_rates()).calculate(body)
+    calc = HistoryService(db).record(
+        user, body.delivery_type, body.model_dump(mode="json"), result.model_dump(mode="json")
+    )
+    if user is not None:
+        result.calculation_id = calc.id
+    return result
 
 
 @router.post("/calculate/compare-rules", response_model=CompareRulesOut)
