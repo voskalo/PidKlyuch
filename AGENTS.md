@@ -1,0 +1,272 @@
+# AGENTS.md — Shared AI Context & Work Log for PidKlyuch
+
+> **Every AI agent (Claude Code, Codex, Cursor, Copilot, Gemini, etc.) working in this repo MUST read this file first.**
+> It is the single source of truth about the project. Read this file *instead of* scanning the whole repo,
+> and open individual source files only when you need to change them.
+>
+> **Every AI agent MUST also update this file at the end of every task** (see §1). If you changed the repo and did
+> not update this file, the task is not finished.
+
+---
+
+## 0. Quick facts (keep this section current)
+
+| Item | Value |
+|---|---|
+| Product | PidKlyuch («Під ключ») — a web calculator for the full landed price of goods imported into Ukraine (parcel → car): duty, VAT, excise |
+| Course | OOAD (OOP), 2nd year, university team project |
+| Team | Liubomyr Voskalo, Anna Kravchenko, Anton Vertyporoh |
+| **Deadline** | **Thursday 19 November 2026 (Module 11)**: live demo + submission |
+| Current phase | Day 1: setup. Only `README.md` and `AGENTS.md` exist so far |
+| Tech stack | **TBD.** Record it in §5 as soon as it is chosen |
+| Live demo URL | TBD (must be HTTPS) |
+| Repo URL | TBD |
+
+---
+
+## 1. MANDATORY rules for AI agents
+
+### 1.1 Before you start a task
+1. Read this whole file.
+2. Check §0 (current phase), §6 (repo structure), §8 (API contract), and the last ~10 entries of §12 (Change log).
+3. Check §11 (Open issues / TODO) for anything related to your task.
+4. Find out which team member you are working for. Their area of ownership is in §3. Do **not** rewrite another
+   member's area without saying so explicitly in the log, because teammates use different agents and will not know.
+
+### 1.2 While working
+- Follow the conventions in §9.
+- Never commit secrets (API keys, DB passwords, JWT secrets). Put them in `.env` (git-ignored) and document the
+  variable **name** in `.env.example` and in §7.
+- Keep the required top-level layout: `backend/`, `frontend/`, `infra/`, `README.md` (graded).
+
+### 1.3 After every task (REQUIRED)
+Update this file, in this order:
+1. **§12 Change log**: append a new entry using the template in §12. Newest entries go at the **bottom**.
+2. **§0 Quick facts**: update the phase, stack, URLs if they changed.
+3. **§6 Repo structure**: if you added or moved files or folders, update the tree and describe what each part does.
+4. **§5 Tech stack / §7 Env vars / §8 API contract**: update if you touched them.
+5. **§10 Decisions**: if you made a non-obvious choice (library, schema, formula, hosting), add it with the reason.
+6. **§11 Open issues / TODO**: add what is left, and remove what you finished.
+
+Write log entries so that **another AI with no other context** can continue the work. Be concrete: file paths,
+function names, endpoints, commands, and what is not working yet. Do not write "updated stuff" or "minor fixes".
+
+If you are not sure whether something is worth logging, log it.
+
+---
+
+## 2. Product summary (from the one-page pitch)
+
+**Tagline:** Know the full price of anything you buy abroad, from a parcel to a car.
+
+**Problem:** Ukrainian import customs rules differ heavily by category, so the final cost is unpredictable.
+- A €200 parcel adds ~€16 in unexpected duties.
+- A €10,000 car adds €2,048–€4,640 in import taxes.
+- From **July 2027**, mandatory VAT applies to **every** imported parcel (no duty-free threshold for VAT).
+
+**Product:** A web calculator. The user selects an import category (electronics, clothing, vehicles, …) and a
+delivery type (parcel, luggage, car), enters item price and shipping, and gets the exact final landed price with an
+itemized breakdown of duty, VAT, and excise in under one minute.
+
+**Target users**
+- Primary B2C: Ukrainians aged 18–35 ordering from Amazon, eBay, or AliExpress near the €150 duty limit (75.6M parcels in 2025).
+- Secondary B2C: people self-importing used cars from the EU or North America (278,628 cars in 2025).
+- B2B (future): parcel forwarders and car-import brokers who want to embed the calculator (API or white-label).
+
+**V1 feature scope from the pitch** (see §4 for what is actually in the demo)
+1. Smart input flow: category + delivery type → short dynamic question flow.
+2. Itemized tax breakdown: duty, VAT, and excise, each with a transparent formula.
+3. Scenario and exchange-rate comparison: 3 carrier offers side by side, today's rules vs. July 2027 rules, live NBU daily rates.
+4. User account and alerts: saved calculation history, price tracking, alerts when customs rules change.
+
+**Validation plan from the pitch:** friends' opinions don't count; users must pay with time or donations.
+Interviews (6 of 10 didn't know their final cost) → MVP with sign-up (100+ sign-ups, 30% return in 14 days) →
+voluntary donation button (10+ donations).
+
+---
+
+## 3. Team & ownership
+
+Full division of work is in `README.md` → "Team & division of work". Summary:
+
+| Member | Owns | Folders |
+|---|---|---|
+| **Liubomyr Voskalo** | Backend: API, database, auth (sign-up/sign-in), calculation engine implementation, NBU rates, history | `backend/` |
+| **Anna Kravchenko** | Frontend: all UI, calculator flow, breakdown view, auth pages, history page, donation button | `frontend/` |
+| **Anton Vertyporoh** | Infra and deploy (HTTPS), customs-rules research and test cases, user testing coordination, final report | `infra/`, `docs/` |
+
+The interfaces between members are the **API contract (§8)**, owned by Liubomyr and consumed by Anna, and the
+**customs rules spec + test cases (§13 and `docs/customs-rules.md`)**, owned by Anton and implemented by Liubomyr.
+
+---
+
+## 4. Assignment requirements (graded)
+
+Build a working prototype of the product, put it in front of real users, and report what happened.
+Demo: **Thursday 19 November 2026**. **Every team member submits individually.**
+
+Submit:
+- Online text: link to the repository + URL of the running demo.
+- File: the report (PDF).
+
+| Criterion | Points | Status |
+|---|---|---|
+| Repo organised with top-level `backend/`, `frontend/`, `infra/` and a `README.md` that tells a stranger what the product is and how to run and deploy it | 3 | ⬜ |
+| Working prototype with sign-in: deployed, reachable over **HTTPS**, users can **sign up and sign in** | 3 | ⬜ |
+| Report with user feedback: who you showed it to, how many tried it, what they said, **what you changed because of it** | 4 | ⬜ |
+| **Bonus:** users ready to pay real money (donation to a volunteer cause, or a working payment in the product), with **evidence in the report** | bonus | ⬜ |
+
+**Demo MVP scope (must have by Wed evening):**
+- Sign up, sign in, sign out.
+- Calculator for **parcels** (category, price, shipping, currency) → itemized duty / VAT / total, with formulas shown.
+- Calculator for **cars** (price, engine type/volume, year) → duty / excise / VAT / total.
+- "Today's rules vs. July 2027 rules" toggle or side-by-side for parcels.
+- Currency conversion using NBU rates (live, with a cached fallback).
+- Saved calculation history for signed-in users.
+- Donation button/link (for a volunteer cause, for the bonus).
+- Simple usage tracking (sign-ups, calculations) to put numbers in the report.
+
+**Nice to have (only if time remains):** compare 3 carrier offers, rule-change alerts, price tracking, luggage mode.
+
+Update the Status column above when a criterion is met.
+
+---
+
+## 5. Tech stack
+
+**Status: TBD.** Whoever decides fills this in and logs the decision in §10.
+
+| Layer | Choice | Notes |
+|---|---|---|
+| Backend language/framework | TBD | |
+| Database | TBD | |
+| Auth method | TBD | e.g. sessions vs JWT; passwords must be hashed |
+| Frontend framework | TBD | |
+| Hosting (backend) | TBD | must be HTTPS |
+| Hosting (frontend) | TBD | must be HTTPS |
+| CI | TBD | |
+
+---
+
+## 6. Repository structure
+
+Current state (update on every structural change):
+
+```
+PidKlyuch/
+├── AGENTS.md      # this file: shared AI context + work log (read first, update last)
+├── CLAUDE.md      # pointer so Claude Code auto-loads AGENTS.md
+└── README.md      # public description, team division of work, run & deploy instructions
+```
+
+Planned (required by grading):
+
+```
+PidKlyuch/
+├── backend/       # API server, auth, calculation engine, DB access   (owner: Liubomyr)
+├── frontend/      # web UI                                           (owner: Anna)
+├── infra/         # Docker / compose / deploy configs, CI            (owner: Anton)
+├── docs/          # customs-rules.md, user-testing notes, report     (owner: Anton)
+├── AGENTS.md
+└── README.md
+```
+
+---
+
+## 7. Environment variables
+
+None yet. Format: `NAME`: where it is used, example value (never a real secret), required or optional.
+
+---
+
+## 8. API contract (backend ↔ frontend)
+
+Not defined yet. Liubomyr's first task is to write the endpoint list here so Anna can build against mocks.
+For each endpoint: method, path, auth required?, request body, response body, error codes.
+
+---
+
+## 9. Conventions
+
+- **Git:** short-lived branches `name/feature` (e.g. `anna/calculator-ui`), merge to `main` via PR or after a quick
+  review in chat. Do not force-push `main`.
+- **Commits:** imperative, short (`Add parcel duty calculation`). If an AI wrote the commit, it may add its own
+  co-author line.
+- **Secrets:** never in git. Use `.env` + `.env.example`.
+- **Money:** do not use binary floats for money if avoidable (use decimal types or integer cents). Round only for
+  display. Always keep the currency next to the amount.
+- **Customs logic** lives in one place in the backend (a single module or service), not duplicated in the frontend.
+- **Language:** code and docs in English. UI text in Ukrainian (target users), with English optional.
+
+---
+
+## 10. Decisions log
+
+Format: `YYYY-MM-DD: decision: reason (who)`
+
+- 2026-11-16: `AGENTS.md` is the single shared AI context file. `CLAUDE.md` only imports it. Reason: the team uses
+  different AI agents. Most of them (Codex, Cursor, Copilot, Gemini CLI via config) read `AGENTS.md`, and Claude Code
+  reads `CLAUDE.md`. (Liubomyr + Claude Code)
+
+---
+
+## 11. Open issues / TODO
+
+- [ ] Choose the tech stack and fill in §5 (all, Mon 16 Nov).
+- [ ] Create `backend/`, `frontend/`, `infra/` skeletons (each owner).
+- [ ] Deploy a "hello world" over HTTPS on day 1 to find hosting problems early (Anton).
+- [ ] Write the API contract in §8 (Liubomyr).
+- [ ] Write `docs/customs-rules.md` with verified rules, sources, and test cases (Anton).
+- [ ] Fill in "How to run" and "How to deploy" in `README.md` (Anton, with input from both other owners).
+
+---
+
+## 12. Change log
+
+**Template (copy for each entry, newest at the bottom):**
+
+```
+### YYYY-MM-DD HH:MM: <short title>
+- **Who:** <team member> via <agent + model, e.g. Claude Code (Opus 5.5) / Codex / Cursor>
+- **Area:** backend | frontend | infra | docs | repo
+- **What was done:** <concrete description>
+- **Files touched:** <paths, created/modified/deleted>
+- **Decisions & why:** <or "none">
+- **How to verify / run:** <commands, URLs, or "n/a">
+- **Not done / known problems / next steps:** <or "none">
+```
+
+### 2026-11-16: Created shared AI context file and work division
+- **Who:** Liubomyr Voskalo via Claude Code (Opus 5.5)
+- **Area:** repo / docs
+- **What was done:** Created `AGENTS.md` (this file) as the single shared context + log for all AI agents. Created
+  `CLAUDE.md`, which only imports `AGENTS.md`. Rewrote `README.md` with the product description, assignment
+  requirements, the division of work for the 3 members, a timeline up to the 19 Nov demo, and placeholder
+  run/deploy sections.
+- **Files touched:** `AGENTS.md` (created), `CLAUDE.md` (created), `README.md` (modified)
+- **Decisions & why:** see §10, first entry.
+- **How to verify / run:** n/a (docs only)
+- **Not done / known problems / next steps:** tech stack not chosen; no code yet; see §11.
+
+---
+
+## 13. Domain notes: Ukrainian customs (to be verified)
+
+> ⚠️ Anton must verify these against official sources (Customs Code of Ukraine, Tax Code of Ukraine,
+> customs.gov.ua, tax.gov.ua) and record the sources and exact rules in `docs/customs-rules.md`.
+> Update this section with a short summary and the date of verification.
+
+**Parcels (current rules, as assumed in the pitch):**
+- Duty-free threshold: **€150** per parcel (value of goods, excluding shipping, as assumed).
+- Above the threshold, on the **excess over €150**: duty **10%**, then VAT **20%** on (excess + duty).
+- Pitch consistency check: €200 parcel → excess €50 → duty €5 → VAT 20% × €55 = €11 → **total ≈ €16** ✔
+- **July 2027 change (from the pitch):** VAT applies to every imported parcel (no threshold for VAT). Exact
+  rules (e.g. whether duty is still threshold-based) must be confirmed.
+
+**Cars:** taxes are customs duty + excise + VAT. Excise depends on engine type, engine volume, and car age, and
+VAT is charged on (customs value + duty + excise). The duty rate may depend on country of origin (EU vs. non-EU).
+Exact formulas and rates are **not filled in yet**. The pitch's reference point is a €10,000 car → €2,048–€4,640
+in taxes, which can serve as a sanity check for test cases.
+
+**Exchange rates:** National Bank of Ukraine (NBU) official daily rates. The public NBU API returns JSON. Cache the
+rates daily and keep a fallback if the API is down.
