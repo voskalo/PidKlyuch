@@ -68,6 +68,10 @@ services:
     restart: unless-stopped
     expose:
       - "80"
+    networks:
+      default:
+        aliases:
+          - frontend
 
 volumes:
   pg_data:

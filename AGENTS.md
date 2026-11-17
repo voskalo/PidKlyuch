@@ -17,9 +17,9 @@
 | Course | OOAD (OOP), 2nd year, university team project |
 | Team | Liubomyr Voskalo, Anna Kravchenko, Anton Vertyporoh |
 | **Deadline** | **Thursday 19 November 2026 (Module 11)**: live demo + submission |
-| Current phase | Day 2 (Tue 17 Nov 2026): Backend MVP implemented on `origin/liubomyr/backend` (66 pytest tests); full-stack AWS EC2 + Docker/Caddy HTTPS infra, locked customs spec, and user testing prep on `anton/infra-and-docs`; `frontend/` pending from Anna |
+| Current phase | Day 2 (Tue 17 Nov 2026): Backend MVP implemented on `origin/liubomyr/backend` (66 pytest tests); AWS EC2 (`i-0f47475721f5e04a5`, `eu-north-1`) live over Let's Encrypt HTTPS (`fallback` profile); full-stack Compose infra, locked customs spec, and user testing prep on `anton/infra-and-docs`; `frontend/` pending from Anna |
 | Tech stack | Python 3.12+ / FastAPI + SQLAlchemy (SQLite local, PostgreSQL prod) · React / Vite SPA · AWS EC2 + Docker Compose + Caddy v2 (see §5) |
-| Live demo URL | TBD (must be HTTPS — planned `https://<EC2-IP>.sslip.io`) |
+| Live demo URL | https://13.60.162.78.sslip.io (verified `200 OK` on `/healthz` and `/`; currently serving fallback HTTPS test page on AWS EC2 `eu-north-1`) |
 | Repo URL | https://github.com/voskalo/PidKlyuch (`origin/main` at docs baseline; `origin/liubomyr/backend` has backend PR #1; `anton/infra-and-docs` has infra & docs) |
 
 ---
@@ -112,7 +112,7 @@ Submit:
 | Criterion | Points | Status |
 |---|---|---|
 | Repo organised with top-level `backend/`, `frontend/`, `infra/` and a `README.md` that tells a stranger what the product is and how to run and deploy it | 3 | ⬜ |
-| Working prototype with sign-in: deployed, reachable over **HTTPS**, users can **sign up and sign in** | 3 | ⬜ |
+| Working prototype with sign-in: deployed, reachable over **HTTPS**, users can **sign up and sign in** | 3 | 🟡 HTTPS live on AWS EC2 `https://13.60.162.78.sslip.io` (fallback page); awaiting `backend/` & `frontend/` merge |
 | Report with user feedback: who you showed it to, how many tried it, what they said, **what you changed because of it** | 4 | ⬜ |
 | **Bonus:** users ready to pay real money (donation to a volunteer cause, or a working payment in the product), with **evidence in the report** | bonus | ⬜ |
 
@@ -262,7 +262,7 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 
 - [x] Choose the tech stack and fill in §5 (all — Backend FastAPI/SQLAlchemy on `origin/liubomyr/backend`, React/Vite SPA, AWS EC2 + Docker/Caddy HTTPS).
 - [ ] Create `backend/`, `frontend/`, `infra/` skeletons (`infra/` full-stack ready by Anton; `backend/` done on `origin/liubomyr/backend`; `frontend/` pending Anna).
-- [ ] Deploy stack on AWS EC2 over HTTPS (`infra/docker-compose.yml` + Caddy + `sslip.io` ready; awaiting `backend/` & `frontend/` merge to `main` and live EC2 launch).
+- [x] Deploy fallback HTTPS stack on AWS EC2 (`i-0f47475721f5e04a5`, `13.60.162.78` in `eu-north-1`, Let's Encrypt verified on `https://13.60.162.78.sslip.io/healthz`); [ ] redeploy full stack once `backend/` & `frontend/` merge to `main`.
 - [x] Write the API contract in §8 (Liubomyr on `origin/liubomyr/backend`; synced into `AGENTS.md` §8).
 - [x] Write `docs/customs-rules.md` with verified rules, sources, and test cases (Anton — 2026-11-16; see `docs/customs-rules.md`).
 - [x] Fill in "How to run" and "How to deploy" in `README.md` (Anton — 2026-11-17; local Docker/dev + AWS EC2 Ubuntu `sslip.io` HTTPS guide).
@@ -415,6 +415,15 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **Decisions & why:** Tailored hooks separately for parcel shoppers (€150 threshold + July 2027 VAT shift) and car buyers (age coefficient, 2026 EV VAT, EUR.1) to maximize external non-friend conversion before Wednesday testing.
 - **How to verify / run:** Review `docs/recruiting-messages.md`, fill in `<HTTPS_DEMO_URL>` and `<GOOGLE_FORM_URL>` once deployed, and send across target communities.
 - **Not done / known problems / next steps:** Awaiting `backend/` (`origin/liubomyr/backend`) and `frontend/` merge to `main`, live AWS EC2 HTTPS deployment via `infra/docker-compose.yml`, Wednesday testing execution, and `docs/report.pdf`.
+
+### 2026-11-17 12:18: Deploy fallback HTTPS stack on AWS EC2 and record live URL
+- **Who:** Anton Vertyporokh via Antigravity CLI
+- **Area:** infra / docs
+- **What was done:** Provisioned a Free Tier Ubuntu 24.04 `t3.micro` EC2 instance (`i-0f47475721f5e04a5`, public IP `13.60.162.78`) in AWS project `591554481308` (`eu-north-1`, profile `pidklyuch`) with Security Group `sg-00ef1a31821b16763` (TCP `22`, `80`, `443` + UDP `443` from `0.0.0.0/0`), SSH key pair `~/.ssh/pidklyuch-ec2.pem` (`chmod 400`), IMDSv2 enforced (`HttpPutResponseHopLimit=2`), encrypted 20 GB `gp3` EBS volume, and user-data bootstrap (Docker + `git clone` + `docker compose --profile fallback`). Fixed a Caddy v2 directive-order bug discovered during live smoke testing: moved `respond /healthz "OK" 200` inside `handle /healthz { ... }` in `infra/Caddyfile` so `/healthz` executes before `reverse_proxy`, and added `frontend` network alias to `hello` in `infra/docker-compose.yml` for `--profile fallback`. Synced both files to EC2 and verified `https://13.60.162.78.sslip.io/healthz` (`HTTP/2 200` `OK`) and `https://13.60.162.78.sslip.io/` (`HTTP/2 200`). Updated `AGENTS.md` §0, §4, §11, and §12.
+- **Files touched:** `infra/Caddyfile` (modified), `infra/docker-compose.yml` (modified), `AGENTS.md` (modified)
+- **Decisions & why:** Wrapped `/healthz` in `handle /healthz` in `infra/Caddyfile` because Caddy v2 executes `reverse_proxy` before bare `respond` directives by default; added `frontend` network alias to `hello` in `--profile fallback` so Caddy proxies immediately without waiting on `frontend` fail-over timeout.
+- **How to verify / run:** `curl -i https://13.60.162.78.sslip.io/healthz` (returns `HTTP/2 200` `OK`) and `curl -I https://13.60.162.78.sslip.io/` (returns `HTTP/2 200`).
+- **Not done / known problems / next steps:** Full-stack redeploy on `13.60.162.78` once `backend/` and `frontend/` merge to `main` (and attach an Elastic IP if needed to preserve the public IP across instance stops, or clean up resources after demo).
 
 ---
 

@@ -5,7 +5,9 @@
 {$DOMAIN:localhost} {
 	encode zstd gzip
 
-	respond /healthz "OK" 200
+	handle /healthz {
+		respond "OK" 200
+	}
 
 	handle /api/* {
 		reverse_proxy backend:8000
