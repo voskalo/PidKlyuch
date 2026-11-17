@@ -17,10 +17,10 @@
 | Course | OOAD (OOP), 2nd year, university team project |
 | Team | Liubomyr Voskalo, Anna Kravchenko, Anton Vertyporoh |
 | **Deadline** | **Thursday 19 November 2026 (Module 11)**: live demo + submission |
-| Current phase | Day 1: **backend MVP done** on branch `liubomyr/backend` (all §8 endpoints ✅, customs rates verified against the law 16.11, 66 tests, not deployed yet); frontend and infra not started |
+| Current phase | Day 2: **backend MVP merged into `main`** (PR #1, 17.11; all §8 endpoints ✅, customs rates verified 16.11, 66 tests, not deployed yet); frontend and infra not started |
 | Tech stack | Backend: Python/FastAPI + SQLAlchemy. **Hosting: AWS (all parts).** Frontend: TBD (see §5) |
 | Live demo URL | TBD (must be HTTPS) |
-| Repo URL | https://github.com/voskalo/PidKlyuch (`main` has only the docs; backend is on the local branch `liubomyr/backend`, **not pushed yet**) |
+| Repo URL | https://github.com/voskalo/PidKlyuch (`main` contains the backend since PR #1) |
 
 ---
 
@@ -411,7 +411,7 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - [ ] Deploy a "hello world" on AWS over HTTPS on day 1 to find hosting problems early (Anton). The backend already has `GET /api/health`.
 - [x] Write the API contract in §8 (Liubomyr).
 - [x] Implement the backend endpoints in §8 (Liubomyr).
-- [ ] Merge `liubomyr/backend` into `main` and push (Liubomyr).
+- [x] Merge `liubomyr/backend` into `main` (Liubomyr, PR #1, 17.11).
 - [ ] Choose the AWS services (backend compute, frontend hosting, IaC tool) and fill in §5 (Anton).
 - [ ] Deploy the backend on AWS over HTTPS with RDS Postgres. `backend/Dockerfile` is ready (push the image to ECR); set `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGINS` from Secrets Manager/SSM (Anton + Liubomyr).
 - [ ] Put the AWS setup into `infra/` (IaC templates or step-by-step console instructions), since `infra/` is graded (Anton).
@@ -595,6 +595,18 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **Not done / known problems / next steps:** schedule the watcher weekly (Anton); 3 sources are manual (news,
   tariff annex); the July 2027 start date depends on a Cabinet decision. **Pitch note:** the €4,640 figure matches a
   2013 car, not a 2014 one; it is still a valid example.
+
+
+### 2026-11-17: Backend merged into main
+- **Who:** Liubomyr Voskalo via Claude Code (Opus 5.5)
+- **Area:** repo
+- **What was done:** Opened PR #1 (https://github.com/voskalo/PidKlyuch/pull/1) from `liubomyr/backend` and merged
+  it into `main` with a merge commit (`cbb4ece`), so all 10 backend commits keep their history. Verified on `main`: 66 tests pass.
+- **Files touched:** `AGENTS.md` (§0, §11, §12)
+- **Decisions & why:** a merge commit, not squash, to keep the step-by-step history of the backend work.
+- **How to verify / run:** `git pull origin main && cd backend && .venv/bin/pytest`
+- **Not done / known problems / next steps:** teammates should branch from the updated `main` (e.g. `anna/frontend`,
+  `anton/infra`). The branch `liubomyr/backend` still exists on GitHub and can be deleted.
 
 ---
 
