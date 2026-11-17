@@ -7,14 +7,26 @@
 
 	respond /healthz "OK" 200
 
-	# Day 1 verification backend: static hello-world page
-	reverse_proxy hello:80
+	handle /api/* {
+		reverse_proxy backend:8000
+	}
 
-	# Day 2+ application routing (uncomment once backend & frontend containers exist):
-	# handle /api/* {
-	# 	reverse_proxy backend:8000
-	# }
-	# handle {
-	# 	reverse_proxy frontend:3000
-	# }
+	handle /docs* {
+		reverse_proxy backend:8000
+	}
+
+	handle /openapi.json {
+		reverse_proxy backend:8000
+	}
+
+	# Route all UI requests to frontend in full-stack mode, with seamless fallback
+	# to the Day 1 hello-world page when started via `--profile fallback`.
+	handle {
+		reverse_proxy frontend:80 hello:80 {
+			lb_policy first
+			lb_retries 1
+			lb_try_duration 2s
+			fail_duration 10s
+		}
+	}
 }

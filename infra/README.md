@@ -1,79 +1,74 @@
 # PidKlyuch Infrastructure & Deployment (`infra/`)
 
-This directory contains the Docker and reverse-proxy configuration used to run and deploy **PidKlyuch («Під ключ»)** over **HTTPS**.
+This directory contains the Docker, database, and Caddy v2 reverse-proxy setup used to run and deploy **PidKlyuch («Під ключ»)** over **HTTPS**.
 
 ## Architecture
 
-PidKlyuch uses **Docker Compose** behind a **Caddy v2** reverse proxy:
-
-- **Caddy v2 (`caddy:2-alpine`)** listens on ports `80` (HTTP), `443` (HTTPS TCP), and `443/udp` (HTTP/3).
-- Caddy automatically provisions and renews TLS certificates via Let's Encrypt / ZeroSSL when `DOMAIN` points to the server's public IP, and automatically redirects all HTTP traffic to HTTPS.
-- For local development (`DOMAIN=localhost`), Caddy uses its internal local CA or self-signed certificates so HTTPS can be tested locally.
-
-### Day 1 ("Hello World" HTTPS Verification)
+PidKlyuch runs behind **Caddy v2 (`caddy:2-alpine`)** on a single HTTPS origin (`DOMAIN`), eliminating cross-origin (CORS) friction between the frontend and backend while providing automatic Let's Encrypt TLS certificates and HTTP → HTTPS redirects.
 
 ```text
-Internet / Client (HTTPS :443, HTTP :80)
+Internet / Client (HTTPS :443, HTTP :80, HTTP/3 :443/udp)
         │
         ▼
-  [ caddy:2-alpine ]  ── /healthz ──▶ 200 OK
-        │
-        ▼ (all other routes)
-  [ hello:80 ]        ── static status page (infra/hello-world/index.html)
+  [ caddy:2-alpine ]
+        ├── /healthz          ──▶ 200 OK
+        ├── /api/*, /docs*    ──▶ [ backend:8000 ]  (FastAPI + Uvicorn) ──▶ [ db:5432 ] (PostgreSQL 16 or AWS RDS)
+        └── /*                ──▶ [ frontend:80 ]   (React/Vite SPA)
+                                  └─ fallback (`--profile fallback`): [ hello:80 ] (infra/hello-world/index.html)
 ```
 
-### Day 2+ (Full Application Routing — planned)
+## Files in `infra/`
 
-Once `backend/` and `frontend/` services are added:
-
-- `/api/*` → routed to `backend:8000`
-- `/*` → routed to `frontend:3000`
+| File | Purpose |
+|---|---|
+| `docker-compose.yml` | Full-stack orchestration (`db`, `backend`, `frontend`, `caddy`) plus optional `fallback` profile (`hello`) |
+| `Caddyfile` | Caddy v2 reverse-proxy config with automatic HTTPS (`{$DOMAIN:localhost}`) and upstream routing |
+| `backend.Dockerfile` | Production Python 3.12 FastAPI container with `/api/health` Docker `HEALTHCHECK` |
+| `frontend.Dockerfile` | Multi-stage Node 20 Vite build + lightweight Caddy static SPA server (`try_files {path} /index.html`) |
+| `.env.example` | Template for Compose, PostgreSQL, Caddy, and backend secrets/variables |
+| `Dockerfile` & `hello-world/` | Standalone static verification container used by the `fallback` profile |
 
 ## Prerequisites
 
 - Docker Engine 24+ and Docker Compose v2 (`docker compose version`)
-- For production HTTPS:
-  - A domain name with an `A` (and/or `AAAA`) DNS record pointing to the host VM
-  - Inbound firewall ports `80/tcp`, `443/tcp`, and `443/udp` open
+- For production HTTPS on AWS EC2:
+  - Inbound Security Group ports open: `80/tcp` (ACME HTTP-01 + redirect), `443/tcp` (HTTPS), `443/udp` (HTTP/3)
+  - Either a custom domain DNS `A` record or `<EC2-PUBLIC-IP-WITH-DASHES>.sslip.io` (e.g. `3-75-120-45.sslip.io`)
 
-## Environment Variables
-
-| Variable | Description | Default | Required in Prod |
-|---|---|---|---|
-| `DOMAIN` | Public domain name (e.g. `pidklyuch.example.com`) or `localhost` for local testing | `localhost` | Yes |
-| `ACME_EMAIL` | Email address for Let's Encrypt / ACME certificate notifications | `admin@example.com` | Recommended |
-
-## Running Locally
-
-From the repository root:
+## Running Full-Stack Locally
 
 ```bash
-DOMAIN=localhost docker compose -f infra/docker-compose.yml up --build
+cp infra/.env.example infra/.env
+docker compose --env-file infra/.env -f infra/docker-compose.yml up --build
 ```
 
-Then verify:
-- Static page: `https://localhost` (accept local dev cert warning if using local CA)
-- Health endpoint: `https://localhost/healthz` → `OK`
+Verify:
+- App UI: `https://localhost`
+- API health: `https://localhost/api/health`
+- Swagger docs: `https://localhost/docs`
+- Proxy health: `https://localhost/healthz` → `OK`
 
-To stop:
+## Fallback Mode (Before `backend/` or `frontend/` Are Merged)
+
+If you want to smoke-test HTTPS on EC2 using only `infra/` without building `backend/` or `frontend/`:
 
 ```bash
-docker compose -f infra/docker-compose.yml down
+DOMAIN=3-75-120-45.sslip.io ACME_EMAIL=you@example.com \
+  docker compose --profile fallback -f infra/docker-compose.yml up -d --build caddy hello
 ```
 
-## Production Deployment
+## Production Deployment (AWS EC2 Ubuntu)
 
-1. Provision a Linux VPS (e.g. Ubuntu 24.04) with Docker and Docker Compose installed, and point your domain's DNS `A` record to the server IP.
-2. Clone the repository on the server and export production variables (or place them in a `.env` file next to `docker-compose.yml` — never commit `.env`):
+1. Copy and edit `infra/.env`:
    ```bash
-   export DOMAIN=your-domain.example.com
-   export ACME_EMAIL=your-email@example.com
+   cp infra/.env.example infra/.env
+   # Set DOMAIN=<EC2-IP-WITH-DASHES>.sslip.io, ACME_EMAIL, POSTGRES_PASSWORD, JWT_SECRET, CORS_ORIGINS
    ```
-3. Start the stack in detached mode:
+2. Launch all services in detached mode:
    ```bash
-   docker compose -f infra/docker-compose.yml up -d --build
+   docker compose --env-file infra/.env -f infra/docker-compose.yml up -d --build
    ```
-4. Check Caddy logs to confirm TLS certificate issuance:
+3. Inspect logs and TLS certificate issuance:
    ```bash
-   docker compose -f infra/docker-compose.yml logs -f caddy
+   docker compose --env-file infra/.env -f infra/docker-compose.yml logs -f caddy backend
    ```

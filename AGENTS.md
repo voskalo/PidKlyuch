@@ -156,14 +156,18 @@ Current state (update on every structural change):
 ```
 PidKlyuch/
 ├── docs/
-│   └── customs-rules.md    # Ukrainian customs rules spec (parcels, cars, NBU rates, test cases)
+│   └── customs-rules.md    # Locked Ukrainian customs spec (parcels, cars, NBU rates, 10 test cases)
 ├── infra/
 │   ├── hello-world/
-│   │   └── index.html      # Day 1 static status/landing page for HTTPS smoke test
-│   ├── Caddyfile           # Caddy v2 reverse proxy config with automatic HTTPS and /healthz
-│   ├── Dockerfile          # lightweight caddy:2-alpine static server image for hello-world
-│   ├── docker-compose.yml  # Docker Compose stack (caddy + hello) with ports 80/443 & volumes
-│   └── README.md           # deployment architecture, prerequisites, run & HTTPS deploy instructions
+│   │   └── index.html      # Fallback static status/landing page for HTTPS smoke test
+│   ├── .env.example        # Full-stack Compose, DB, Caddy, and backend env var template
+│   ├── .gitignore          # Ignores infra/.env and *.env.local
+│   ├── Caddyfile           # Caddy v2 reverse proxy (/api/* -> backend, /* -> frontend/hello, /healthz)
+│   ├── Dockerfile          # Lightweight caddy:2-alpine static server image for fallback hello-world
+│   ├── backend.Dockerfile  # Production Python 3.12 FastAPI container with /api/health HEALTHCHECK
+│   ├── frontend.Dockerfile # Multi-stage Node 20 Vite build + Caddy static SPA server
+│   ├── docker-compose.yml  # Full-stack Compose (db, backend, frontend, caddy + fallback hello profile)
+│   └── README.md           # Deployment architecture, full-stack & fallback modes, AWS EC2 HTTPS guide
 ├── AGENTS.md               # this file: shared AI context + work log (read first, update last)
 ├── CLAUDE.md               # pointer so Claude Code auto-loads AGENTS.md
 └── README.md               # public description, team division of work, run & deploy instructions
@@ -187,12 +191,13 @@ PidKlyuch/
 
 Format: `NAME`: where it is used, example value (never a real secret), required or optional.
 
-### Infra & Reverse Proxy (`infra/`)
+### Infra & Reverse Proxy (`infra/.env.example`, `infra/docker-compose.yml`)
 - `DOMAIN`: `infra/docker-compose.yml` & `infra/Caddyfile` (site block host for automatic HTTPS), example `3-75-120-45.sslip.io` or `localhost`, optional (defaults to `localhost`).
 - `ACME_EMAIL`: `infra/docker-compose.yml` & `infra/Caddyfile` (Let's Encrypt / ACME notification email), example `admin@example.com`, optional (defaults to `admin@example.com`).
 - `POSTGRES_USER`: Postgres container (`db` service in `infra/docker-compose.yml`), example `pidklyuch`, optional locally.
-- `POSTGRES_PASSWORD`: Postgres container (`db` service in `infra/docker-compose.yml`), example `change-me-db-password`, **required in prod** when using local Compose Postgres.
+- `POSTGRES_PASSWORD`: Postgres container (`db` service in `infra/docker-compose.yml`), example `change-me-strong-db-password`, **required in prod** when using local Compose Postgres.
 - `POSTGRES_DB`: Postgres container (`db` service in `infra/docker-compose.yml`), example `pidklyuch`, optional.
+- `VITE_API_URL`: frontend build arg in `infra/docker-compose.yml` & `infra/frontend.Dockerfile`, defaults to `/api` when served behind Caddy.
 
 ### Backend (`backend/.env.example`, `backend/app/core/config.py`)
 - `DATABASE_URL`: backend, SQLAlchemy URL (`sqlite:///./pidklyuch.db` locally; `postgresql+psycopg://user:pass@host:5432/pidklyuch` or RDS URL with `?sslmode=require` in prod). Optional locally, **required in prod**.
@@ -254,8 +259,8 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 ## 11. Open issues / TODO
 
 - [x] Choose the tech stack and fill in §5 (all — Backend FastAPI/SQLAlchemy on `origin/liubomyr/backend`, React/Vite SPA, AWS EC2 + Docker/Caddy HTTPS).
-- [ ] Create `backend/`, `frontend/`, `infra/` skeletons (`infra/` done by Anton; `backend/` done on `origin/liubomyr/backend`; `frontend/` pending Anna).
-- [ ] Deploy a "hello world" over HTTPS on day 1 to find hosting problems early (compose + Caddy config ready in `infra/`; live AWS EC2 deploy pending).
+- [ ] Create `backend/`, `frontend/`, `infra/` skeletons (`infra/` full-stack ready by Anton; `backend/` done on `origin/liubomyr/backend`; `frontend/` pending Anna).
+- [ ] Deploy stack on AWS EC2 over HTTPS (`infra/docker-compose.yml` + Caddy + `sslip.io` ready; awaiting `backend/` & `frontend/` merge to `main` and live EC2 launch).
 - [x] Write the API contract in §8 (Liubomyr on `origin/liubomyr/backend`; synced into `AGENTS.md` §8).
 - [x] Write `docs/customs-rules.md` with verified rules, sources, and test cases (Anton — 2026-11-16; see `docs/customs-rules.md`).
 - [ ] Fill in "How to run" and "How to deploy" in `README.md` (Anton, with input from both other owners).
@@ -369,6 +374,15 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **Decisions & why:** Aligned `docs/customs-rules.md` 1:1 with `backend/app/customs/calculators.py` & `tax_rates.json` so Liubomyr's backend tests and Anton's documentation cannot diverge.
 - **How to verify / run:** Inspect `docs/customs-rules.md` §2, §4, §5 and cross-check with `backend/app/customs/tax_rates.json` on `origin/liubomyr/backend`.
 - **Not done / known problems / next steps:** Next step (Step 3) is upgrading `infra/` to full-stack Docker Compose + Caddy reverse proxy.
+
+### 2026-11-17 11:18: Configure full-stack Docker Compose and Caddy reverse proxy
+- **Who:** Anton Vertyporokh via Antigravity CLI
+- **Area:** infra
+- **What was done:** Upgraded `infra/` for full-stack production deployment while preserving `hello-world` under `--profile fallback`. Created `infra/backend.Dockerfile` (Python 3.12-slim + `/api/health` Docker `HEALTHCHECK`), `infra/frontend.Dockerfile` (Node 20 Vite multi-stage build + Caddy SPA server with `try_files {path} /index.html`), `infra/.env.example`, and `infra/.gitignore`. Updated `infra/Caddyfile` (`/healthz` → 200 OK, `/api/*` & `/docs*` & `/openapi.json` → `backend:8000`, `/*` → `frontend:80` with `hello:80` failover via `lb_policy first`), `infra/docker-compose.yml` (added `db` `postgres:16-alpine` with `pg_isready`, `backend`, `frontend`, `caddy`, and `hello` under `profiles: ["fallback"]`), and `infra/README.md`. Updated `AGENTS.md` §6, §7, §11, and §12.
+- **Files touched:** `infra/backend.Dockerfile` (created), `infra/frontend.Dockerfile` (created), `infra/.env.example` (created), `infra/.gitignore` (created), `infra/Caddyfile` (modified), `infra/docker-compose.yml` (modified), `infra/README.md` (modified), `AGENTS.md` (modified)
+- **Decisions & why:** Kept `hello` under `profiles: ["fallback"]` and avoided hard `depends_on` from `caddy` to `backend`/`frontend` so `caddy + hello` can run independently before `backend/` & `frontend/` merge, while full-stack mode runs `db`, `backend`, `frontend`, and `caddy` cleanly on one HTTPS origin.
+- **How to verify / run:** `cp infra/.env.example infra/.env && docker compose --env-file infra/.env -f infra/docker-compose.yml config` (or `--profile fallback` for `caddy hello`).
+- **Not done / known problems / next steps:** Next step (Step 4) is writing "How to run" and "How to deploy" in root `README.md`.
 
 ---
 
