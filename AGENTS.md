@@ -156,8 +156,9 @@ Current state (update on every structural change):
 ```
 PidKlyuch/
 ├── docs/
-│   ├── customs-rules.md    # Locked Ukrainian customs spec (parcels, cars, NBU rates, 10 test cases)
-│   └── user-testing-plan.md# Moderator script (2 tasks), Google Form questions, 15-tester tracker table
+│   ├── customs-rules.md       # Locked Ukrainian customs spec (parcels, cars, NBU rates, 10 test cases)
+│   ├── recruiting-messages.md # Ukrainian outreach templates for Telegram/FB/DMs (15+ testers)
+│   └── user-testing-plan.md   # Moderator script (2 tasks), Google Form questions, 15-tester tracker table
 ├── infra/
 │   ├── hello-world/
 │   │   └── index.html      # Fallback static status/landing page for HTTPS smoke test
@@ -266,6 +267,7 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - [x] Write `docs/customs-rules.md` with verified rules, sources, and test cases (Anton — 2026-11-16; see `docs/customs-rules.md`).
 - [x] Fill in "How to run" and "How to deploy" in `README.md` (Anton — 2026-11-17; local Docker/dev + AWS EC2 Ubuntu `sslip.io` HTTPS guide).
 - [x] Create user-testing script, Google Form questions, and master tester tracker (`docs/user-testing-plan.md`, Anton — 2026-11-17).
+- [x] Create Ukrainian tester recruiting templates (`docs/recruiting-messages.md`, Anton — 2026-11-17).
 - [ ] Run Wednesday user-testing sessions (15+ external testers, collect quotes, UX fixes, and donation screenshots) and write `docs/report.pdf` (all, Wed 18 – Thu 19 Nov).
 
 ---
@@ -404,6 +406,15 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **Decisions & why:** Structured the script and Google Form around concrete grading evidence (task completion, verbatim quotes, Wednesday UX changes, and donation screenshots) to feed directly into `docs/report.pdf`.
 - **How to verify / run:** Review `docs/user-testing-plan.md` and copy questions from §3 into the team's Google Form.
 - **Not done / known problems / next steps:** Next step (Step 6) is creating `docs/recruiting-messages.md`.
+
+### 2026-11-17 11:28: Add Ukrainian tester recruiting message templates
+- **Who:** Anton Vertyporokh via Antigravity CLI
+- **Area:** docs
+- **What was done:** Created `docs/recruiting-messages.md` with 4 ready-to-send Ukrainian recruiting templates (international online shopping TG/FB groups, car-import TG/FB communities, student/IT chats, and direct personal DMs + follow-up with donation screenshot prompt) plus a 3-member outreach quota checklist targeting 15+ external testers for Wednesday 18 Nov. Updated `AGENTS.md` §6, §11, and §12 (and confirmed §13 verified customs summary is locked).
+- **Files touched:** `docs/recruiting-messages.md` (created), `AGENTS.md` (modified)
+- **Decisions & why:** Tailored hooks separately for parcel shoppers (€150 threshold + July 2027 VAT shift) and car buyers (age coefficient, 2026 EV VAT, EUR.1) to maximize external non-friend conversion before Wednesday testing.
+- **How to verify / run:** Review `docs/recruiting-messages.md`, fill in `<HTTPS_DEMO_URL>` and `<GOOGLE_FORM_URL>` once deployed, and send across target communities.
+- **Not done / known problems / next steps:** Awaiting `backend/` (`origin/liubomyr/backend`) and `frontend/` merge to `main`, live AWS EC2 HTTPS deployment via `infra/docker-compose.yml`, Wednesday testing execution, and `docs/report.pdf`.
 
 ---
 
