@@ -108,9 +108,18 @@ cp .env.example .env            # defaults work locally (SQLite file pidklyuch.d
 
 The API endpoints and the request/response formats are described in [`AGENTS.md`](AGENTS.md) §8.
 
-### Frontend
+### Frontend (React 19 + TypeScript + Vite)
 
-_TBD (Anna)._
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+- Web UI: http://localhost:5173
+- Production build: `npm run build` (outputs static assets to `frontend/dist/`)
+- In local development, `/api/*` requests are proxied automatically to `http://127.0.0.1:8000`.
+- In production, set `VITE_API_BASE_URL` in `.env` if the backend is hosted on a separate origin.
 
 ## How to deploy
 
