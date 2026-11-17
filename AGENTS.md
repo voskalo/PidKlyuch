@@ -17,8 +17,8 @@
 | Course | OOAD (OOP), 2nd year, university team project |
 | Team | Liubomyr Voskalo, Anna Kravchenko, Anton Vertyporoh |
 | **Deadline** | **Thursday 19 November 2026 (Module 11)**: live demo + submission |
-| Current phase | Day 2: **backend MVP merged into `main`** (PR #1, 17.11; all §8 endpoints ✅, customs rates verified 16.11, 66 tests, not deployed yet); frontend and infra not started |
-| Tech stack | Backend: Python/FastAPI + SQLAlchemy. **Hosting: AWS (all parts).** Frontend: TBD (see §5) |
+| Current phase | Day 2: **backend MVP merged into `main`**; **frontend MVP complete & verified** (React 19 + TypeScript + Vite + Tailwind v4, connects to all §8 endpoints, auth/parcels/cars/history/rates/compare/donation done); AWS infra in progress (Anton) |
+| Tech stack | Backend: Python/FastAPI + SQLAlchemy. Frontend: React 19 + TypeScript + Vite + Tailwind CSS v4. **Hosting: AWS (all parts).** |
 | Live demo URL | TBD (must be HTTPS) |
 | Repo URL | https://github.com/voskalo/PidKlyuch (`main` contains the backend since PR #1) |
 
@@ -112,8 +112,8 @@ Submit:
 
 | Criterion | Points | Status |
 |---|---|---|
-| Repo organised with top-level `backend/`, `frontend/`, `infra/` and a `README.md` that tells a stranger what the product is and how to run and deploy it | 3 | ⬜ |
-| Working prototype with sign-in: deployed, reachable over **HTTPS**, users can **sign up and sign in** | 3 | 🟡 backend auth done, not deployed yet; no UI |
+| Repo organised with top-level `backend/`, `frontend/`, `infra/` and a `README.md` that tells a stranger what the product is and how to run and deploy it | 3 | 🟡 backend/ and frontend/ done, infra/ pending |
+| Working prototype with sign-in: deployed, reachable over **HTTPS**, users can **sign up and sign in** | 3 | 🟡 backend & frontend auth complete; pending AWS deploy |
 | Report with user feedback: who you showed it to, how many tried it, what they said, **what you changed because of it** | 4 | ⬜ |
 | **Bonus:** users ready to pay real money (donation to a volunteer cause, or a working payment in the product), with **evidence in the report** | bonus | ⬜ |
 
@@ -143,7 +143,7 @@ Backend chosen 2026-11-16 (Liubomyr). **Everything is hosted on AWS using AWS se
 | ORM / Database | **SQLAlchemy 2.0**: SQLite locally, **Postgres** in prod | set via `DATABASE_URL`; tables are auto-created on startup (no migrations yet) |
 | Auth method | **JWT bearer tokens** (PyJWT, HS256) | passwords hashed with PBKDF2-SHA256 (stdlib) |
 | Tests | **pytest** + FastAPI `TestClient` | `cd backend && .venv/bin/pytest` |
-| Frontend framework | TBD (Anna) | consumes §8 |
+| Frontend framework | **React 19 / TypeScript / Vite / Tailwind CSS v4** | `frontend/`, mobile-first responsive layout, Lucide icons, proxy `/api` |
 | Hosting (backend) | **AWS**: service TBD (Anton). Options: App Runner, ECS Fargate + ALB, Elastic Beanstalk (Docker) | runs `backend/Dockerfile`; health check `GET /api/health`; HTTPS required (ACM certificate or the service's built-in HTTPS) |
 | Database (prod) | **AWS RDS for PostgreSQL** | `DATABASE_URL=postgresql://user:pass@<rds-endpoint>:5432/pidklyuch?sslmode=require` |
 | Hosting (frontend) | **AWS**: service TBD (Anton/Anna). Options: S3 + CloudFront, or Amplify Hosting | HTTPS via CloudFront/ACM |
@@ -177,50 +177,69 @@ PidKlyuch/
 ├── AGENTS.md      # this file: shared AI context + work log (read first, update last)
 ├── CLAUDE.md      # pointer so Claude Code auto-loads AGENTS.md
 ├── README.md      # public description, team division of work, run & deploy instructions
-└── backend/                     # FastAPI service (owner: Liubomyr)
-    ├── requirements.txt         # runtime deps (pinned)
-    ├── requirements-dev.txt     # + pytest
-    ├── .env.example             # documented env vars (copy to .env)
-    ├── Dockerfile               # python:3.12-slim, runs uvicorn on $PORT (default 8000); build context = backend/
-    ├── scripts/check_law_updates.py  # law watcher: fetches source articles from zakon.rada.gov.ua, compares clause
-    │                                 #   fingerprints with tax_rates.json; exit 0 ok / 1 changed / 2 can't check
-    ├── app/
-    │   ├── main.py              # create_app(): CORS, routers, DB init on startup
-    │   ├── core/config.py       # Settings (pydantic-settings, reads env/.env)
-    │   ├── core/database.py     # engine, SessionLocal, Base, get_db(), init_db(), normalize_db_url()
-    │   ├── api/health.py        # GET /api/health
-    │   ├── api/auth.py          # /api/auth/signup|signin|me
-    │   ├── api/schemas_auth.py  # pydantic request/response models for auth
-    │   ├── api/deps.py          # get_current_user / get_optional_user (Bearer JWT)
-    │   ├── core/security.py     # PBKDF2 password hashing, JWT encode/decode
-    │   ├── api/calculate.py     # POST /api/calculate, POST /api/calculate/compare-rules, GET /api/rates
-    │   ├── api/schemas_calc.py  # ParcelIn/CarIn (discriminated by delivery_type), CalculationOut, RatesOut
-    │   ├── api/history.py       # GET /api/history, DELETE /api/history/{id}, GET /api/stats
-    │   ├── models/              # SQLAlchemy ORM models: user.py (User), calculation.py (Calculation: input/result JSON)
-    │   ├── services/            # business services (use cases)
-    │   │   ├── auth_service.py        # AuthService: register/authenticate
-    │   │   ├── rates_service.py       # RatesService: NBU fetch, 1h cache, fallback; RateTable.to_eur()
-    │   │   ├── calculation_service.py # CalculationService: request → EUR → calculator → response with UAH
-    │   │   └── history_service.py     # HistoryService: record / list_for / delete_for / stats
-    │   └── customs/             # customs calculation engine (pure Python, no DB/HTTP), all amounts in EUR
-    │       ├── tax_rates.json   # ★ ALL tax numbers (thresholds, rates, excise table) + legal sources + fingerprints
-    │       │                    #   → THE ONLY place to change taxes. No numbers in code.
-    │       ├── rules.py         # loads + validates tax_rates.json (or $TAX_RATES_PATH) into ParcelRules/CarRules;
-    │       │                    #   exports TAX_RATES, PARCEL_RULES, PARCEL_CURRENT, PARCEL_JULY_2027, CAR_CURRENT
-    │       ├── models.py        # ParcelInput, CarInput, TaxLine, Breakdown (totals), money() rounding, enums
-    │       └── calculators.py   # CustomsCalculator (ABC) → ParcelCalculator, CarCalculator (Strategy pattern)
-    └── tests/                   # pytest (66 tests). Run: cd backend && .venv/bin/pytest
-        ├── conftest.py          # sets test env (SQLite test.db, fast hashing), `client` fixture with fresh tables,
-        │                        #   overrides get_rates_service with FAKE_NBU (1 EUR = 50 UAH, 1 USD = 40 UAH)
-        ├── test_health.py       # /api/health
-        ├── test_auth.py         # hashing, signup/signin/me, duplicates, validation, bad tokens
-        ├── test_customs.py      # pure engine: hand-calculated cases from the verified law (parcels, 2027, cars, EV)
-        ├── test_tax_rates_file.py # rates file loads, cites sources, TAX_RATES_PATH override, broken file fails
-        ├── test_law_watcher.py  # watcher offline: normalize/extract/fingerprint, changed → 1, missing/offline → 2
-        ├── test_rates.py        # NBU parsing, conversion, fallback, cache-on-failure, /api/rates
-        ├── test_calculate_api.py# /api/calculate (parcel, car, USD conversion, 422s), compare-rules
-        └── test_history.py      # history save/list/delete/privacy, /api/stats, normalize_db_url
+├── backend/                     # FastAPI service (owner: Liubomyr)
+│   ├── requirements.txt         # runtime deps (pinned)
+│   ├── requirements-dev.txt     # + pytest
+│   ├── .env.example             # documented env vars (copy to .env)
+│   ├── Dockerfile               # python:3.12-slim, runs uvicorn on $PORT (default 8000); build context = backend/
+│   ├── scripts/check_law_updates.py  # law watcher: fetches source articles from zakon.rada.gov.ua, compares clause
+│   │                                 #   fingerprints with tax_rates.json; exit 0 ok / 1 changed / 2 can't check
+│   ├── app/
+│   │   ├── main.py              # create_app(): CORS, routers, DB init on startup
+│   │   ├── core/config.py       # Settings (pydantic-settings, reads env/.env)
+│   │   ├── core/database.py     # engine, SessionLocal, Base, get_db(), init_db(), normalize_db_url()
+│   │   ├── api/health.py        # GET /api/health
+│   │   ├── api/auth.py          # /api/auth/signup|signin|me
+│   │   ├── api/schemas_auth.py  # pydantic request/response models for auth
+│   │   ├── api/deps.py          # get_current_user / get_optional_user (Bearer JWT)
+│   │   ├── core/security.py     # PBKDF2 password hashing, JWT encode/decode
+│   │   ├── api/calculate.py     # POST /api/calculate, POST /api/calculate/compare-rules, GET /api/rates
+│   │   ├── api/schemas_calc.py  # ParcelIn/CarIn (discriminated by delivery_type), CalculationOut, RatesOut
+│   │   ├── api/history.py       # GET /api/history, DELETE /api/history/{id}, GET /api/stats
+│   │   ├── models/              # SQLAlchemy ORM models: user.py (User), calculation.py (Calculation: input/result JSON)
+│   │   ├── services/            # business services (use cases)
+│   │   │   ├── auth_service.py        # AuthService: register/authenticate
+│   │   │   ├── rates_service.py       # RatesService: NBU fetch, 1h cache, fallback; RateTable.to_eur()
+│   │   │   ├── calculation_service.py # CalculationService: request → EUR → calculator → response with UAH
+│   │   │   └── history_service.py     # HistoryService: record / list_for / delete_for / stats
+│   │   └── customs/             # customs calculation engine (pure Python, no DB/HTTP), all amounts in EUR
+│   │       ├── tax_rates.json   # ★ ALL tax numbers (thresholds, rates, excise table) + legal sources + fingerprints
+│   │       │                    #   → THE ONLY place to change taxes. No numbers in code.
+│   │       ├── rules.py         # loads + validates tax_rates.json (or $TAX_RATES_PATH) into ParcelRules/CarRules;
+│   │       │                    #   exports TAX_RATES, PARCEL_RULES, PARCEL_CURRENT, PARCEL_JULY_2027, CAR_CURRENT
+│   │       ├── models.py        # ParcelInput, CarInput, TaxLine, Breakdown (totals), money() rounding, enums
+│   │       └── calculators.py   # CustomsCalculator (ABC) → ParcelCalculator, CarCalculator (Strategy pattern)
+│   └── tests/                   # pytest (66 tests). Run: cd backend && .venv/bin/pytest
+└── frontend/                    # React 19 + TypeScript + Vite SPA (owner: Anna)
+    ├── package.json             # React 19, TypeScript, Vite, Tailwind CSS v4, Lucide Icons
+    ├── vite.config.ts           # dev server on port 5173 with proxy /api → http://127.0.0.1:8000
+    ├── index.html               # meta tags, Ukrainian title & description, responsive viewport
+    ├── public/favicon.svg       # key brand icon
+    ├── README.md                # frontend documentation & run guide
+    └── src/
+        ├── main.tsx             # React DOM root entry point
+        ├── index.css            # Tailwind CSS v4 root stylesheet
+        ├── App.tsx              # Main UI layout, hero, calculator tabs (parcels/cars), state & modals
+        ├── types/api.ts         # TypeScript models matching backend §8 contract (requests, breakdowns, auth, stats)
+        ├── services/api.ts      # Fetch API wrapper with JWT Bearer auth, error handling, 401 handling
+        ├── context/AuthContext.tsx # React AuthProvider (user state, login/signup/logout, token storage)
+        └── components/
+            ├── Navbar.tsx       # Brand header, calculator/history tabs, ZSU donation trigger, auth badge
+            ├── RatesBar.tsx     # Live NBU daily exchange rates ticker (EUR, USD, PLN, GBP)
+            ├── ParcelForm.tsx   # Dynamic parcel form (category, prices, shipping, sender, current/2027 rules)
+            ├── CarForm.tsx      # Dynamic car form (engine type cc vs kWh, year with K_age preview, EU origin)
+            ├── BreakdownView.tsx # Transparent landed cost breakdown, itemized tax lines, formulas, legal badge
+            ├── CompareRulesModal.tsx # Side-by-side comparison modal of current vs July 2027 rules
+            ├── HistoryView.tsx  # User calculation history list, expandable itemized formulas, delete item
+            ├── AuthModal.tsx    # Tabbed modal for sign-in & sign-up
+            ├── DonationModal.tsx # ZSU / volunteer support modal (Come Back Alive, Prytula, Monobank)
+            ├── StatsModal.tsx   # Live usage analytics modal from /api/stats for project reporting
+            └── Footer.tsx       # Legal disclaimers, law references, team credits
 ```
+
+**Frontend architecture:**
+Clean component-driven SPA consuming the backend API contract (§8):
+`App.tsx` (state orchestrator, tab switching, modals) → `context/AuthContext.tsx` (token & user session) → `services/api.ts` (HTTP layer with Bearer token & proxy) → `components/` (pure presentational & dynamic interaction components). All formulas and tax lines received from the backend are rendered transparently to ensure 100% parity with Ukrainian legislation without duplicating tax math in JS.
 
 **Backend architecture (layers; each one only calls the layer below it):**
 `api/` (HTTP: routing, pydantic validation, auth dependencies) → `services/` (use cases: AuthService,
@@ -254,6 +273,7 @@ Backend vars are documented in `backend/.env.example`, read by `backend/app/core
 - `NBU_API_URL`: backend, NBU exchange-rate endpoint. Optional (has a default).
 - `PASSWORD_HASH_ITERATIONS`: backend, PBKDF2 iterations, default `390000`. Only lowered in tests.
 - `TAX_RATES_PATH`: backend, alternative rates file (default `app/customs/tax_rates.json`), e.g. one synced from S3. Optional.
+- `VITE_API_BASE_URL`: frontend, backend base URL (e.g. `https://api.pidklyuch.example.com`). Optional locally (defaults to `/api` with Vite proxy), set in production if frontend and backend have separate origins.
 
 ---
 
@@ -401,19 +421,24 @@ Format: `YYYY-MM-DD: decision: reason (who)`
   an external file (e.g. from S3) if rates ever need to change without a redeploy. (Liubomyr + Claude Code)
 - 2026-11-16: Customs rules research moved from Anton to Liubomyr (Liubomyr's decision). (Liubomyr)
 - 2026-11-16: Work happens on branch `liubomyr/backend`; it gets merged into `main` when the backend MVP is ready. (Liubomyr)
+- 2026-11-17: Frontend stack = React 19 + TypeScript + Vite + Tailwind CSS v4 + Lucide Icons. Reason: fast build times (~580ms), lightweight static output suitable for any AWS hosting (S3/CloudFront or Amplify), reactive component state, and zero CSS runtime bloat. (Anna + Gemini)
+- 2026-11-17: Frontend does not duplicate customs math. All formulas and tax breakdowns are received from the backend API contract (§8) and rendered transparently with exact formula strings, currency badges, and Ukrainian legal notes. (Anna + Gemini)
+- 2026-11-17: Vite dev server configured with proxy `/api` → `http://127.0.0.1:8000`. Reason: eliminates CORS overhead during local team development. Production uses `VITE_API_BASE_URL` or relative paths behind CloudFront. (Anna + Gemini)
+- 2026-11-17: Added dedicated donation modal supporting verified Ukrainian volunteer funds («Повернись живим», Фонд Сергія Притули, Monobank) to satisfy project bonus grading criterion. (Anna + Gemini)
 
 ---
 
 ## 11. Open issues / TODO
 
-- [x] Backend stack chosen (§5). [ ] Frontend stack and hosting still open (Anna, Anton).
-- [x] `backend/` skeleton. [ ] `frontend/`, `infra/` skeletons (Anna, Anton).
+- [x] Backend stack chosen (§5). [x] Frontend stack chosen (React 19 + TypeScript + Vite + Tailwind v4, Anna). [ ] Hosting services selection (Anton).
+- [x] `backend/` skeleton and implementation (Liubomyr). [x] `frontend/` complete UI implementation (Anna). [ ] `infra/` skeleton & configs (Anton).
 - [ ] Deploy a "hello world" on AWS over HTTPS on day 1 to find hosting problems early (Anton). The backend already has `GET /api/health`.
 - [x] Write the API contract in §8 (Liubomyr).
 - [x] Implement the backend endpoints in §8 (Liubomyr).
 - [x] Merge `liubomyr/backend` into `main` (Liubomyr, PR #1, 17.11).
 - [ ] Choose the AWS services (backend compute, frontend hosting, IaC tool) and fill in §5 (Anton).
 - [ ] Deploy the backend on AWS over HTTPS with RDS Postgres. `backend/Dockerfile` is ready (push the image to ECR); set `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGINS` from Secrets Manager/SSM (Anton + Liubomyr).
+- [ ] Deploy the frontend on AWS (S3 + CloudFront or AWS Amplify) with HTTPS (Anton + Anna).
 - [ ] Put the AWS setup into `infra/` (IaC templates or step-by-step console instructions), since `infra/` is graded (Anton).
 - [ ] The Docker image build was not verified (no Docker daemon on Liubomyr's machine on 16.11). Run `docker build backend` once.
 - [x] Verify the customs rates against the law, move them into `tax_rates.json`, and test with hand-calculated cases (Liubomyr, 16.11).
@@ -422,7 +447,8 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - [ ] Re-check by hand when the Cabinet sets the start date of the July 2027 parcel VAT (source `law_5025_ix`) (Liubomyr).
 - [ ] Optional: a "luggage" delivery type. The rules are already verified (Customs Code 374 p.1 and p.4): €1000 tax-free by air, €500/50 kg by land, then 10% duty + VAT on the excess (Liubomyr).
 - [x] README "How to run locally" → Backend, plus backend production env vars under "How to deploy" (Liubomyr).
-- [ ] README: the Frontend run section (Anna) and the actual deploy steps / hosting / HTTPS (Anton).
+- [x] README: the Frontend run section (Anna). [ ] README: the actual deploy steps / hosting / HTTPS (Anton).
+- [ ] User testing sessions (all 3 members: recruit 5+ testers each, collect feedback & donation evidence for report) (Anna, Liubomyr, Anton).
 
 ---
 
@@ -607,6 +633,29 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **How to verify / run:** `git pull origin main && cd backend && .venv/bin/pytest`
 - **Not done / known problems / next steps:** teammates should branch from the updated `main` (e.g. `anna/frontend`,
   `anton/infra`). The branch `liubomyr/backend` still exists on GitHub and can be deleted.
+
+### 2026-11-17: Frontend SPA implementation complete (React 19, TypeScript, Vite, Tailwind v4)
+- **Who:** Anna Kravchenko via Antigravity (Gemini 3.8 Flash)
+- **Area:** frontend
+- **What was done:** Built the complete responsive frontend application for PidKlyuch in `frontend/`:
+  - **Auth & Session:** AuthContext + AuthModal (tabbed sign-up, sign-in, token management via localStorage, auto-logout on 401, header user badge and sign-out).
+  - **Parcel Calculator:** category selection (electronics, clothing, cosmetics, toys, other), item price + currency (EUR, USD, UAH, PLN, GBP), shipping cost, sender toggle (marketplace vs private gift), rules selector (Current vs July 2027), and "Compare Now vs 2027" modal.
+  - **Car Calculator:** engine selection (petrol, diesel, hybrid, electric), dynamic fields (engine cc for combustion/hybrids vs battery kWh for EVs), year of manufacture with live preview of the $K_{age}$ coefficient, and origin selector (EU certificate EUR.1 for 0% duty vs other origins for 10% duty).
+  - **Breakdown & Formulas:** itemized landed cost cards (EUR and UAH), total taxes, transparent display of the exact mathematical formulas for duty, excise, and VAT, zero-tax celebration banner when under the €150 / €45 threshold, verified legal rates date badge, and notes.
+  - **Saved History:** history view for logged-in users (`GET /api/history`), itemized past calculations review, and delete item (`DELETE /api/history/{id}`).
+  - **Live Exchange Rates:** top live rates ticker (`GET /api/rates`) showing official NBU rates with date, fallback indicator, and refresh button.
+  - **Bonus Donation Modal:** volunteer fund support modal with direct links to «Повернись живим», «Благодійний фонд Сергія Притули», and Monobank Jar.
+  - **Usage Metrics Modal:** modal viewing real-time counters from `/api/stats` (calculations, registered users, returning users) for the final report.
+  - Configured Vite dev server with proxy to `http://127.0.0.1:8000` for `/api` requests.
+  - Verified production build compiles cleanly in ~580ms with 0 errors (`npm run build`).
+- **Files touched:**
+  - Created: `frontend/vite.config.ts`, `frontend/index.html`, `frontend/package.json`, `frontend/public/favicon.svg`, `frontend/README.md`
+  - Created source code: `frontend/src/types/api.ts`, `frontend/src/services/api.ts`, `frontend/src/context/AuthContext.tsx`, `frontend/src/index.css`, `frontend/src/App.tsx`
+  - Created components: `frontend/src/components/{Navbar.tsx, RatesBar.tsx, ParcelForm.tsx, CarForm.tsx, BreakdownView.tsx, CompareRulesModal.tsx, HistoryView.tsx, AuthModal.tsx, DonationModal.tsx, StatsModal.tsx, Footer.tsx}`
+  - Modified: `README.md` (updated Frontend run instructions), `AGENTS.md` (§0, §4, §5, §6, §7, §10, §11, §12)
+- **Decisions & why:** see §10 (React 19 + TypeScript + Vite + Tailwind v4, Lucide icons, Vite API proxy).
+- **How to verify / run:** `cd frontend && npm install && npm run build` (builds to `dist/`); `npm run dev` to run locally on http://localhost:5173.
+- **Not done / known problems / next steps:** AWS hosting deployment by Anton (S3 + CloudFront or AWS Amplify); recruit 5+ testers for user testing on Wednesday.
 
 ---
 
