@@ -263,7 +263,7 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - [ ] Deploy stack on AWS EC2 over HTTPS (`infra/docker-compose.yml` + Caddy + `sslip.io` ready; awaiting `backend/` & `frontend/` merge to `main` and live EC2 launch).
 - [x] Write the API contract in §8 (Liubomyr on `origin/liubomyr/backend`; synced into `AGENTS.md` §8).
 - [x] Write `docs/customs-rules.md` with verified rules, sources, and test cases (Anton — 2026-11-16; see `docs/customs-rules.md`).
-- [ ] Fill in "How to run" and "How to deploy" in `README.md` (Anton, with input from both other owners).
+- [x] Fill in "How to run" and "How to deploy" in `README.md` (Anton — 2026-11-17; local Docker/dev + AWS EC2 Ubuntu `sslip.io` HTTPS guide).
 
 ---
 
@@ -383,6 +383,15 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **Decisions & why:** Kept `hello` under `profiles: ["fallback"]` and avoided hard `depends_on` from `caddy` to `backend`/`frontend` so `caddy + hello` can run independently before `backend/` & `frontend/` merge, while full-stack mode runs `db`, `backend`, `frontend`, and `caddy` cleanly on one HTTPS origin.
 - **How to verify / run:** `cp infra/.env.example infra/.env && docker compose --env-file infra/.env -f infra/docker-compose.yml config` (or `--profile fallback` for `caddy hello`).
 - **Not done / known problems / next steps:** Next step (Step 4) is writing "How to run" and "How to deploy" in root `README.md`.
+
+### 2026-11-17 11:21: Add How to run and How to deploy guides to README.md
+- **Who:** Anton Vertyporokh via Antigravity CLI
+- **Area:** docs / repo
+- **What was done:** Replaced the placeholder "How to run locally" and "How to deploy" sections in root `README.md` with copy-pasteable guides: (1) Full-stack Docker Compose + `--profile fallback` command, (2) individual local dev commands for `backend/` (Python 3.12+ venv, `uvicorn`, `pytest`, `check_law_updates.py`) and `frontend/` (`npm install && npm run dev`), and (3) a 5-step AWS EC2 Ubuntu 24.04 deployment guide covering Security Group ports (`22`, `80`, `443/tcp`, `443/udp`), Docker installation, `infra/.env` configuration with `<EC2-IP>.sslip.io` automatic HTTPS (plus optional AWS RDS `?sslmode=require`), verification endpoints, and weekly law-watcher cron setup. Updated `AGENTS.md` §11 and §12.
+- **Files touched:** `README.md` (modified), `AGENTS.md` (modified)
+- **Decisions & why:** Recommended `<EC2-IP>.sslip.io` + Caddy v2 in `README.md` so the team gets zero-cost valid Let's Encrypt HTTPS certificates immediately on any EC2 public IP without buying a domain.
+- **How to verify / run:** Review `README.md` "How to run" and "How to deploy" sections.
+- **Not done / known problems / next steps:** Next step (Step 5) is creating `docs/user-testing-plan.md`.
 
 ---
 

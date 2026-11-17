@@ -87,10 +87,128 @@ docs/       Customs rules spec, user-testing notes, report          (Anton)
 AGENTS.md   Shared context and work log for AI agents: read first, update after every task
 ```
 
-## How to run locally
+## How to run
 
-_TBD: filled in once the stack is chosen (prerequisites, env vars from `.env.example`, commands for backend and frontend)._
+### Option A: Full-Stack via Docker Compose (Recommended)
+
+**Prerequisites:** Docker Engine 24+ and Docker Compose v2 (`docker compose version`).
+
+```bash
+cp infra/.env.example infra/.env
+docker compose --env-file infra/.env -f infra/docker-compose.yml up --build
+```
+
+- **App UI (HTTPS via Caddy):** `https://localhost`
+- **API health check:** `https://localhost/api/health`
+- **Interactive API docs (Swagger):** `https://localhost/docs`
+- **Reverse-proxy health check:** `https://localhost/healthz`
+
+*(If running only the Day 1 HTTPS infrastructure before `backend/` or `frontend/` are present on your branch, use the fallback profile:)*
+
+```bash
+DOMAIN=localhost docker compose --profile fallback -f infra/docker-compose.yml up --build caddy hello
+```
+
+### Option B: Run Services Individually (Local Development)
+
+#### Backend (Python 3.12+ / FastAPI)
+
+```bash
+cd backend
+python3 -m venv .venv
+.venv/bin/pip install -r requirements-dev.txt
+cp .env.example .env            # uses local SQLite (pidklyuch.db) by default
+.venv/bin/uvicorn app.main:app --reload
+```
+
+- API health: `http://localhost:8000/api/health`
+- Interactive Swagger docs: `http://localhost:8000/docs`
+- Unit tests (`66` tests): `cd backend && .venv/bin/pytest`
+- Law watcher check: `cd backend && .venv/bin/python scripts/check_law_updates.py`
+
+#### Frontend (Node.js 20+ / React + Vite)
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+- Local UI: `http://localhost:5173` (CORS is pre-configured on the backend for `http://localhost:5173` and `http://localhost:3000`).
+
+---
 
 ## How to deploy
 
-_TBD: hosting provider, how HTTPS is set up, deploy commands, required environment variables._
+PidKlyuch deploys as a single HTTPS origin on **AWS EC2 (Ubuntu 24.04 LTS)** using **Docker Compose** and **Caddy v2** (automatic Let's Encrypt TLS certificates, HTTP → HTTPS redirect, and `/api/*` → FastAPI + `/*` → SPA routing).
+
+### Step 1: Launch AWS EC2 Instance & Open Firewall Ports
+1. Launch an **Ubuntu Server 24.04 LTS** EC2 instance (`t3.small` recommended, or `t3.micro` with 1–2 GB swap).
+2. In the EC2 **Security Group** inbound rules, allow:
+   - `22/tcp` (SSH from your IP)
+   - `80/tcp` (HTTP — required for Let's Encrypt ACME challenge and HTTP → HTTPS redirect)
+   - `443/tcp` (HTTPS)
+   - `443/udp` (HTTP/3)
+
+### Step 2: Install Docker & Docker Compose on EC2
+SSH into the instance and run:
+
+```bash
+sudo apt-get update && sudo apt-get install -y ca-certificates curl git
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker $USER
+newgrp docker
+docker compose version
+```
+
+### Step 3: Clone Repo & Configure Production Environment
+Use `<EC2-PUBLIC-IP-WITH-DASHES>.sslip.io` (e.g. `3-75-120-45.sslip.io`) so Caddy v2 automatically issues a valid Let's Encrypt HTTPS certificate without purchasing a custom domain:
+
+```bash
+git clone https://github.com/voskalo/PidKlyuch.git
+cd PidKlyuch
+cp infra/.env.example infra/.env
+```
+
+Generate a strong `JWT_SECRET`:
+
+```bash
+python3 -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+Edit `infra/.env` (never commit `.env` to git):
+
+```dotenv
+DOMAIN=3-75-120-45.sslip.io
+ACME_EMAIL=your-email@example.com
+POSTGRES_USER=pidklyuch
+POSTGRES_PASSWORD=<strong-db-password>
+POSTGRES_DB=pidklyuch
+DATABASE_URL=postgresql+psycopg://pidklyuch:<strong-db-password>@db:5432/pidklyuch
+# Or point DATABASE_URL to AWS RDS for PostgreSQL:
+# DATABASE_URL=postgresql+psycopg://user:pass@<rds-endpoint>:5432/pidklyuch?sslmode=require
+JWT_SECRET=<generated-48-byte-secret>
+JWT_EXPIRE_MINUTES=10080
+CORS_ORIGINS=https://3-75-120-45.sslip.io
+NBU_API_URL=https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json
+VITE_API_URL=/api
+```
+
+### Step 4: Start the Production Stack & Verify HTTPS
+
+```bash
+docker compose --env-file infra/.env -f infra/docker-compose.yml up -d --build
+docker compose --env-file infra/.env -f infra/docker-compose.yml logs -f caddy backend
+```
+
+Verify from your browser or `curl`:
+- `https://<DOMAIN>/healthz` → `OK`
+- `https://<DOMAIN>/api/health` → `{"status":"ok"}`
+- `https://<DOMAIN>/` → PidKlyuch web UI over valid HTTPS
+
+### Step 5: Optional Weekly Law-Watcher Check (`cron`)
+Monitor `zakon.rada.gov.ua` source clauses weekly so any legislative change triggers a non-zero exit alert:
+
+```bash
+0 9 * * 1 cd /home/ubuntu/PidKlyuch && docker compose --env-file infra/.env -f infra/docker-compose.yml exec -T backend python scripts/check_law_updates.py
+```
