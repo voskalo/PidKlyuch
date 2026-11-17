@@ -209,7 +209,9 @@ PidKlyuch/
 │   │       │                    #   exports TAX_RATES, PARCEL_RULES, PARCEL_CURRENT, PARCEL_JULY_2027, CAR_CURRENT
 │   │       ├── models.py        # ParcelInput, CarInput, TaxLine, Breakdown (totals), money() rounding, enums
 │   │       └── calculators.py   # CustomsCalculator (ABC) → ParcelCalculator, CarCalculator (Strategy pattern)
-│   └── tests/                   # pytest (66 tests). Run: cd backend && .venv/bin/pytest
+│   └── tests/                   # pytest (122 tests). Run: cd backend && .venv/bin/pytest
+│                                #   test_edge_cases.py = hostile/boundary input (bad tokens, NaN, decimals, thresholds
+│                                #   after conversion, car year/engine bounds, signup race, CORS) + 17.11 regressions
 └── frontend/                    # React 19 + TypeScript + Vite SPA (owner: Anna)
     ├── package.json             # React 19, TypeScript, Vite, Tailwind CSS v4, Lucide Icons
     ├── vite.config.ts           # dev server on port 5173 with proxy /api → http://127.0.0.1:8000
@@ -299,6 +301,10 @@ Money in responses is a **string with 2 decimals** (e.g. `"16.00"`), so no float
 
 **Sign-out** is client-side: delete the stored token (JWT is stateless).
 
+**Token rules (since 17.11):** no `Authorization` header → anonymous (allowed on `/api/calculate`). A header with an
+invalid or expired token → **401 on every endpoint, including `/api/calculate`**, so the client signs the user out
+instead of silently not saving to history. Retrying without the header works anonymously.
+
 **Notes for the frontend (Anna):**
 - Store the `access_token` (e.g. in `localStorage`) and send it on every request. `/api/calculate` works without
   it too, but then nothing is saved to history.
@@ -307,7 +313,8 @@ Money in responses is a **string with 2 decimals** (e.g. `"16.00"`), so no float
   `CORS_ORIGINS` in `backend/.env`.
 - Start the backend locally (README → "How to run locally") and use http://localhost:8000/docs to try requests.
 
-**POST /api/auth/signup**: body `{"email": "a@b.com", "password": "min 8 chars", "name": "Anna"}` (`name` optional)
+**POST /api/auth/signup**: body `{"email": "a@b.com", "password": "8–128 chars", "name": "Anna"}` (`name` optional,
+max 100 chars, trimmed; blank → `null`; the email is trimmed and lowercased)
 → `201 {"access_token": "...", "token_type": "bearer", "user": {"id": 1, "email": "a@b.com", "name": "Anna", "created_at": "ISO"}}`.
 `409` if the email is already registered.
 
@@ -355,7 +362,10 @@ Response `200`:
 `line.code` ∈ `duty | excise | vat`. A parcel under the threshold has `lines: []`. `calculation_id` is `null`
 when the caller is not signed in. `rate_source` is `"fallback"` if NBU was unreachable, in which case `notes` says so
 and the UI should show a small warning. `formula` and `notes` are Ukrainian text, ready to display. The 422 body for
-a car missing `engine_volume_cc` / `battery_kwh` contains the reason in `detail[0].msg`.
+a car missing `engine_volume_cc` / `battery_kwh` contains the reason in `detail[0].msg`. Since 17.11, 422 errors
+only describe the model chosen by `delivery_type` (before, a bad car also produced "Input should be 'parcel'"). An
+unknown `delivery_type` gives `detail[0].type == "union_tag_invalid"`. Prices accept at most 2 decimal places
+(`"150.005"` → 422), so the UI should round or limit input to cents.
 `rates_verified_at` = the date the tax rates were last checked against the law. Show it in the UI (e.g. "Ставки
 станом на 16.11.2026"). Parcels over €10,000 get a note that the result is only approximate.
 
@@ -436,6 +446,10 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - [x] Write the API contract in §8 (Liubomyr).
 - [x] Implement the backend endpoints in §8 (Liubomyr).
 - [x] Merge `liubomyr/backend` into `main` (Liubomyr, PR #1, 17.11).
+- [ ] **The live demo is DOWN (checked 17.11 ~12:40):** `13.60.162.78` (recorded on the branch `anton/infra-and-docs`,
+  not yet in `main`) refuses connections on ports 22/80/443, so the EC2 instance is probably stopped. Restart it,
+  **attach an Elastic IP** so the address survives restarts, then redeploy the full stack from `main` (backend +
+  frontend are merged) and merge `anton/infra-and-docs` so the live URL is in `main` (Anton).
 - [ ] Choose the AWS services (backend compute, frontend hosting, IaC tool) and fill in §5 (Anton).
 - [ ] Deploy the backend on AWS over HTTPS with RDS Postgres. `backend/Dockerfile` is ready (push the image to ECR); set `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGINS` from Secrets Manager/SSM (Anton + Liubomyr).
 - [ ] Deploy the frontend on AWS (S3 + CloudFront or AWS Amplify) with HTTPS (Anton + Anna).
@@ -656,6 +670,36 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **Decisions & why:** see §10 (React 19 + TypeScript + Vite + Tailwind v4, Lucide icons, Vite API proxy).
 - **How to verify / run:** `cd frontend && npm install && npm run build` (builds to `dist/`); `npm run dev` to run locally on http://localhost:5173.
 - **Not done / known problems / next steps:** AWS hosting deployment by Anton (S3 + CloudFront or AWS Amplify); recruit 5+ testers for user testing on Wednesday.
+
+
+### 2026-11-17: Live-site check, edge-case testing, 3 backend bugs fixed
+- **Who:** Liubomyr Voskalo via Claude Code (Opus 5.5)
+- **Area:** backend / testing
+- **What was done:**
+  - **Live site:** `https://13.60.162.78.sslip.io` (from Anton's branch) is unreachable; all ports are closed, from
+    both inside and outside the sandbox, while other sites load fine. See the TODO in §11.
+  - **Local full-stack check:** ran backend + frontend (Vite proxy) from `main`. Sign-up → EV calculation (€2,090,
+    live NBU) → history → 2027 comparison all work through the proxy. `npm run build` passes; `npm run lint` has 0
+    errors and 6 warnings (setState in effects, `Date` called during render in `CarForm.tsx`) for Anna.
+  - **Probed ~60 hostile/boundary inputs.** Fixed:
+    (1) `/api/calculate` ignored the `delivery_type` discriminator (`Body(...)` default dropped
+    `Field(discriminator)`), so car 422s started with "Input should be 'parcel'". Fixed with
+    `Body(discriminator=...)` in `schemas_calc.CalculationIn`.
+    (2) An invalid or expired token on `/api/calculate` was silently treated as anonymous: 200, not saved to
+    history. `deps.get_optional_user` now returns 401.
+    (3) Concurrent sign-ups with the same email → 500 `IntegrityError`. `AuthService.register` now catches it and
+    returns 409.
+    (4) A blank `name` was stored as `""`; it is now trimmed, and blank becomes null.
+  - Added `backend/tests/test_edge_cases.py` (56 tests). 18 of them fail on the old code, proving they catch the bugs.
+- **Files touched:** modified `backend/app/api/{calculate.py,deps.py,schemas_auth.py,schemas_calc.py}`,
+  `backend/app/services/auth_service.py`; created `backend/tests/test_edge_cases.py`; modified `AGENTS.md` (§6, §8,
+  §11, §12).
+- **Decisions & why:** a bad token → 401 even where auth is optional, because silently dropping the user's history
+  is worse than asking them to sign in again (the frontend already signs out on 401).
+- **How to verify / run:** `cd backend && .venv/bin/pytest` (122 passed).
+- **Not done / known problems / next steps:** the live site is down (Anton). The frontend shows the English "Not
+  authenticated" message after a 401 on calculate; Anna may want a Ukrainian message ("Сесія завершилась, увійдіть
+  знову").
 
 ---
 
