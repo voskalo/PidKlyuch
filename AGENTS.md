@@ -361,21 +361,30 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **How to verify / run:** `git fetch origin && git merge origin/main` and inspect `AGENTS.md` §5, §7, §8.
 - **Not done / known problems / next steps:** Next step (Step 2) is resolving the remaining legal TODOs in `docs/customs-rules.md` against verified Laws № 5025-IX / № 5026-IX and `backend/app/customs/tax_rates.json`.
 
+### 2026-11-17 11:15: Finalize customs-rules.md and resolve legal TODOs
+- **Who:** Anton Vertyporokh via Antigravity CLI
+- **Area:** docs
+- **What was done:** Resolved all `TODO (Legal Verification)` placeholders in `docs/customs-rules.md` against enacted Laws № 5025-IX / № 5026-IX (15.10.2026), Law № 2697-IX (DCFTA), Law № 4695-IX, and `backend/app/customs/tax_rates.json`. Locked July 2027 parcel rules (20% VAT on `V_EUR` excluding shipping for `<= €150`, €45 P2P private gift exemption, `> €150` unchanged), car rules (DCFTA 0% EU origin duty with EUR.1, hybrid excise at petrol ICE rate, EV 20% VAT since 01.01.2026, Pension Fund/broker exclusions), and updated all 10 worked test cases (`TC-P1`..`TC-P5`, `TC-C1`..`TC-C5`) + §13 domain summary in `AGENTS.md`.
+- **Files touched:** `docs/customs-rules.md` (modified), `AGENTS.md` (modified)
+- **Decisions & why:** Aligned `docs/customs-rules.md` 1:1 with `backend/app/customs/calculators.py` & `tax_rates.json` so Liubomyr's backend tests and Anton's documentation cannot diverge.
+- **How to verify / run:** Inspect `docs/customs-rules.md` §2, §4, §5 and cross-check with `backend/app/customs/tax_rates.json` on `origin/liubomyr/backend`.
+- **Not done / known problems / next steps:** Next step (Step 3) is upgrading `infra/` to full-stack Docker Compose + Caddy reverse proxy.
+
 ---
 
-## 13. Domain notes: Ukrainian customs (Verified 2026-11-16)
+## 13. Domain notes: Ukrainian customs (Verified & Locked 2026-11-17)
 
-> Verified 2026-11-16 by Anton Vertyporokh against МКУ (Art. 234, 374), ПКУ (Art. 191, 196.1.17, 215.3.5-1), customs.gov.ua, tax.gov.ua, and NBU API specs. Full specification, formulas, legal TODOs, and 10 worked test cases live in [`docs/customs-rules.md`](docs/customs-rules.md).
+> Verified against МКУ (Art. 234, 374 p.7–8), ПКУ (Art. 14.1.49-1, 196.1.17, 215.3.5-1), Laws № 5025-IX / № 5026-IX (15.10.2026), Law № 2697-IX (DCFTA), Law № 4695-IX, and `backend/app/customs/tax_rates.json`. Full specification, resolved edge cases, and 10 worked test cases live in [`docs/customs-rules.md`](docs/customs-rules.md).
 
-**Parcels (current rules — МКУ Art. 234, ПКУ Art. 196.1.17):**
-- Duty-free threshold: **€150.00** per parcel (goods value $V_{\text{EUR}}$; itemized shipping excluded from threshold base, included in total landed cost).
+**Parcels (current rules — МКУ Art. 374 p.7–8):**
+- Duty-free threshold: **€150.00** per parcel (invoice value of goods $V_{\text{EUR}}$; itemized shipping excluded from threshold base, included in total landed cost). Above €10,000 requires full commercial declaration (calculator notes approximate estimate).
 - Above €150 on the **excess**: **10%** duty, then **20%** VAT on $(\text{Excess} + \text{Duty})$ (`€200` parcel → `€5.00` duty + `€11.00` VAT = **€16.00** tax).
-- **July 2027 change:** €150 VAT threshold is abolished; **20% VAT** applies from €0.01 on $(V_{\text{EUR}} + \text{Duty}_{2027})$, while 10% duty stays above €150 (`€200` parcel → `€5.00` duty + `€41.00` VAT = **€46.00** tax). Open legal-verification TODOs (shipping inside sub-€150 VAT base, C2C €45 gifts) are logged in `docs/customs-rules.md` §2.3.
+- **July 2027 change (Laws № 5025-IX / № 5026-IX, ≥ 01.07.2027):** Marketplace/commercial parcels $\le €150$ pay **20% VAT** on $V_{\text{EUR}}$ (excluding shipping) and **0% duty**; private P2P parcels $\le €45$ remain tax-free (`sender = "private"`); parcels $> €150$ remain unchanged (`€200` → **€16.00** tax). All legal TODOs resolved.
 
-**Cars (ПКУ Art. 215.3.5-1, МКУ):**
-- **Duty:** 10% of $V_{\text{EUR}}$ for `petrol`/`diesel`; 0% for `electric`.
-- **Excise:** ICE = $R_{\text{base}} \times (E_{\text{cm3}} / 1000) \times K_{\text{age}}$, where $R_{\text{base}}$ is `€50`/`€100` (`petrol` $\le 3000$ / $>3000\text{ cm}^3$) or `€75`/`€150` (`diesel` $\le 3500$ / $>3500\text{ cm}^3$), and $K_{\text{age}} = \min(15, \max(1, Y_{\text{curr}} - Y_{\text{prod}} - 1))$. EV = `€1.00 × battery_kWh`.
-- **VAT:** 20% on $(V_{\text{EUR}} + \text{Duty} + \text{Excise})$ (EV VAT exemption expired 1 Jan 2026).
-- **Pitch check (€10,000 car):** 40 kWh EV → **€2,048.00** tax; 2.0L diesel ($K_{\text{age}}=8$) → **€4,640.00** tax ✔
+**Cars (ПКУ Art. 215.3.5-1, DCFTA):**
+- **Duty:** 10% of $(V_{\text{car}} + S_{\text{border}})$ for `origin="other"`; 0% for documented EU origin (`origin="eu"` with EUR.1); 0% for `electric` regardless of origin.
+- **Excise:** ICE & `hybrid` (at petrol rate) = $R_{\text{base}} \times (E_{\text{cm3}} / 1000) \times K_{\text{age}}$, where $R_{\text{base}}$ is `€50`/`€100` (`petrol` $\le 3000$ / $>3000\text{ cm}^3$) or `€75`/`€150` (`diesel` $\le 3500$ / $>3500\text{ cm}^3$), and $K_{\text{age}} = \min(15, \max(1, Y_{\text{curr}} - Y_{\text{prod}} - 1))$. EV = `€1.00 × battery_kWh`.
+- **VAT:** 20% on $(V_{\text{EUR}} + \text{Duty} + \text{Excise})$ (EV 0% VAT exemption expired 01.01.2026). Pension Fund first-registration levy, certification, and broker fees excluded.
+- **Pitch check (€10,000 car):** 40 kWh EV (or EU 0.8L new petrol) → **€2,048.00** tax; 2.0L diesel ($K_{\text{age}}=8$) / 2013 2.0L petrol ($K_{\text{age}}=12$) → **€4,640.00** tax ✔
 
-**Exchange rates:** NBU official daily JSON API (`https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json`). Cache daily (`Europe/Kyiv`) with 3-tier fallback (`nbu_live`/`nbu_cached` → `nbu_stale_cache` → static `fallback` constants).
+**Exchange rates:** NBU official daily JSON API (`https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json`). In-memory cache (1h TTL) + last-good cache + static `fallback` constants (`rate_source: "fallback"`).

@@ -1,8 +1,8 @@
 # Ukrainian Customs Calculation Rules & Specification (`PidKlyuch`)
 
-> **Owner:** Anton Vertyporokh (`docs/`)  
+> **Owner:** Anton Vertyporokh (`docs/`) & Liubomyr Voskalo (`backend/app/customs/tax_rates.json`)  
 > **Consumer:** Liubomyr Voskalo (`backend/` calculation engine & unit tests)  
-> **Status:** Active specification (2026-11-16)
+> **Status:** Verified & Locked Specification (2026-11-17)
 
 ---
 
@@ -26,8 +26,11 @@ This document is the single source of truth for all customs duty, excise, and VA
 
 | Source | Relevance | URL |
 |---|---|---|
-| **Customs Code of Ukraine (МКУ)** | Articles 234 (taxation of postal & express shipments), 374 (personal goods & vehicle import thresholds) | https://zakon.rada.gov.ua/laws/show/4495-17 |
-| **Tax Code of Ukraine (ПКУ)** | Articles 191, 196.1.17 (parcel VAT threshold), 215.3.5-1 (car excise formulas) | https://zakon.rada.gov.ua/laws/show/2755-17 |
+| **Customs Code of Ukraine (МКУ)** | Articles 234 & 374 p.7–8 (postal/express thresholds up to €150 and €10,000) | https://zakon.rada.gov.ua/laws/show/4495-17 |
+| **Tax Code of Ukraine (ПКУ)** | Articles 14.1.49-1 (distance sales VAT), 191, 196.1.17, 215.3.5-1 (car excise) | https://zakon.rada.gov.ua/laws/show/2755-17 |
+| **Laws № 5025-IX & № 5026-IX (15.10.2026)** | July 2027 parcel VAT reform (≤€150 VAT, €45 P2P exemption, >€150 unchanged) | https://zakon.rada.gov.ua/laws/show/2755-17 |
+| **Customs Tariff / EU-Ukraine DCFTA (Law № 2697-IX)** | 10% baseline passenger car duty; 0% preferential EU-origin duty (EUR.1) | https://zakon.rada.gov.ua/laws/show/2697-20 |
+| **State Budget Law 2026 (№ 4695-IX)** | Expiry of EV 0% VAT exemption as of 01.01.2026 (standard 20% VAT applies) | https://zakon.rada.gov.ua |
 | **State Customs Service of Ukraine** | Official guidance on postal/express parcel clearance & passenger car import | https://customs.gov.ua |
 | **State Tax Service of Ukraine** | Official VAT & excise clarifications | https://tax.gov.ua |
 | **National Bank of Ukraine (NBU) API** | Official daily UAH exchange rates (JSON) | https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json |
@@ -39,9 +42,11 @@ This document is the single source of truth for all customs duty, excise, and VA
 **Legal basis:** Customs Code of Ukraine (МКУ) Art. 234 & Art. 374, Tax Code of Ukraine (ПКУ) Art. 196.1.17.
 
 ### 1.1 Scope & Base Value
-- Applies to international postal and express shipments (**міжнародні поштові та експрес-відправлення**) addressed to an individual recipient for personal use in a single dispatch/day (up to €10,000 customs value).
+- Applies to non-excisable goods in international postal and express shipments (**міжнародні поштові та експрес-відправлення**) addressed to an individual recipient in a single dispatch/day (simplified regime up to **€10,000.00** customs value per МКУ Art. 374 p.7).
+- **Shipments > €10,000.00 (МКУ Art. 374 p.8):** Require full commercial customs declaration at full Customs Tariff rates; the calculator still applies the baseline formula and attaches a warning note that the estimate is approximate.
 - **Customs Value Base ($V_{\text{EUR}}$):** Invoice/declared value of the goods converted to **EUR** via the NBU daily rate.
 - **Shipping cost ($S_{\text{EUR}}$):** For personal international postal/express parcels where freight is itemized separately on the invoice, shipping is **excluded** from the €150 duty/VAT base, though it is added to the final **Total Landed Price** paid by the buyer.
+- **Exclusions:** Excisable goods (alcohol, tobacco, etc.) in parcels follow separate rules and are out of scope for the MVP parcel calculator.
 
 ### 1.2 Threshold & Tax Rates
 - **Duty-free threshold:** $T = 150.00\text{ EUR}$
@@ -75,34 +80,37 @@ For a parcel with goods value $V_{\text{EUR}} = 200.00\text{ EUR}$:
 
 ---
 
-## 2. Upcoming July 2027 Parcel Import Rules (VAT Threshold Abolition)
+## 2. Upcoming July 2027 Parcel Import Rules (Laws № 5025-IX & № 5026-IX)
 
-**Context:** Ukrainian tax reform aligning cross-border e-commerce imports with EU Council Directive 2017/2455 (IOSS / import VAT framework) and the PidKlyuch pitch specification taking effect **July 2027**.
+**Legal basis:** Laws of Ukraine **№ 5025-IX** (Tax Code amendments, Art. 14.1.49-1 "distance sale of goods") and **№ 5026-IX** (Customs Code amendments, Art. 374 p.7), adopted **15.10.2026**, taking effect **no earlier than 1 July 2027** following Cabinet of Ministers implementation decision.
 
 ### 2.1 Key Change vs. Today's Rules
-- The **€150 VAT-free threshold is abolished**: mandatory **20% VAT** applies to **every** imported parcel starting from **€0.01**.
-- Under the MVP specification, **Customs Duty (10%)** remains governed by the €150 threshold on the excess over €150 (subject to final enacted wording — see `TODO` items below).
+- **Marketplace / commercial parcels $\le €150.00$ (`sender = "marketplace"`):** The €150 VAT-free threshold is abolished; mandatory **20% VAT** applies from €0.01 (collected at checkout for distance sales), with **0% customs duty**.
+- **Private C2C parcels $\le €45.00$ (`sender = "private"`):** Non-commercial shipments sent from one private individual to another remain **tax-free** (`Duty = 0.00`, `VAT = 0.00`) up to **€45.00**; private parcels between `€45.01` and `€150.00` pay **20% VAT** on $V_{\text{EUR}}$.
+- **Parcels $> €150.00$:** Unchanged by Laws № 5025-IX / № 5026-IX — both **10% duty** and **20% VAT** continue to apply only to the **excess above €150.00**.
 
 ### 2.2 Formulas (July 2027 Rules)
 
-#### Case A: $V_{\text{EUR}} \le 150.00\text{ EUR}$
+#### Case A: $V_{\text{EUR}} \le 45.00\text{ EUR}$ and `sender == "private"`
+$$\text{Duty}_{2027} = 0.00, \quad \text{VAT}_{2027} = 0.00, \quad \text{Total Tax}_{2027} = 0.00$$
+$$\text{Total Landed Price}_{2027} = V_{\text{EUR}} + S_{\text{EUR}}$$
+
+#### Case B: $V_{\text{EUR}} \le 150.00\text{ EUR}$ (`sender == "marketplace"`, or `sender == "private"` with $V_{\text{EUR}} > 45.00$)
 $$\text{Duty}_{2027} = 0.00$$
 $$\text{VAT}_{2027} = \text{round}_2(0.20 \times V_{\text{EUR}})$$
 $$\text{Total Tax}_{2027} = \text{VAT}_{2027}$$
 $$\text{Total Landed Price}_{2027} = V_{\text{EUR}} + S_{\text{EUR}} + \text{Total Tax}_{2027}$$
 
-#### Case B: $V_{\text{EUR}} > 150.00\text{ EUR}$ (up to $10,000\text{ EUR}$)
+#### Case C: $V_{\text{EUR}} > 150.00\text{ EUR}$ (up to $10,000\text{ EUR}$)
 $$\text{Excess}_{\text{EUR}} = V_{\text{EUR}} - 150.00$$
 $$\text{Duty}_{2027} = \text{round}_2(0.10 \times \text{Excess}_{\text{EUR}})$$
-$$\text{VAT}_{2027} = \text{round}_2\big(0.20 \times (V_{\text{EUR}} + \text{Duty}_{2027})\big)$$
+$$\text{VAT}_{2027} = \text{round}_2\big(0.20 \times (\text{Excess}_{\text{EUR}} + \text{Duty}_{2027})\big)$$
 $$\text{Total Tax}_{2027} = \text{Duty}_{2027} + \text{VAT}_{2027}$$
 $$\text{Total Landed Price}_{2027} = V_{\text{EUR}} + S_{\text{EUR}} + \text{Total Tax}_{2027}$$
 
-*(Comparison note: For a €200.00 parcel, today's tax is `€5.00 + €11.00 = €16.00`, whereas under July 2027 rules duty stays `€5.00` and VAT jumps to `0.20 × (€200.00 + €5.00) = €41.00`, giving `€46.00` total tax — a `€30.00` increase because the initial €150 is no longer VAT-exempt.)*
-
-### 2.3 Open Edge Cases (`TODO: Legal Verification`)
-- **`TODO 1 (Legal Verification)` — Shipping inside sub-€150 VAT base:** Verify in the final enacted Verkhovna Rada bill whether international shipping ($S_{\text{EUR}}$) is included in the 20% VAT taxable base for B2C parcels $\le 150\text{ EUR}$, or whether VAT applies solely to the intrinsic value of goods ($V_{\text{EUR}}$) + duty. *MVP default:* tax $V_{\text{EUR}} + \text{Duty}_{2027}$ so the "Today vs. July 2027" comparison isolates the removal of the €150 VAT threshold cleanly.
-- **`TODO 2 (Legal Verification)` — Duty threshold & C2C gifts:** Confirm whether 10% customs duty above €150 remains strictly on the excess ($V_{\text{EUR}} - 150$) or shifts to the full value above €150, and whether non-commercial C2C private gifts retain a €45 exemption threshold.
+### 2.3 Resolved Legal Edge Cases (Locked for Backend Unit Tests)
+1. **Shipping cost in sub-€150 VAT base:** Resolved — under Tax Code Art. 14.1.49-1 and Customs Code Art. 374 p.7, the taxable base for distance-sale parcel VAT is the intrinsic invoice value of goods ($V_{\text{EUR}}$), **excluding itemized shipping** ($S_{\text{EUR}}$).
+2. **Treatment of parcels $> €150$ and C2C gifts:** Resolved — Laws № 5025-IX / № 5026-IX preserve the €45.00 tax-free allowance exclusively for non-commercial private-to-private (`sender = "private"`) parcels and leave the excess-based formula for parcels $> €150.00$ unchanged (`€200.00` parcel stays `€16.00` tax, matching `backend/app/customs/calculators.py`). *(Note: Early un-enacted draft proposals taxed the entire value above €150 once exceeded, which is superseded by the enacted law text.)*
 
 ---
 
@@ -135,14 +143,9 @@ For any input amount $A_{\text{CC}}$ in currency $\text{CC}$:
 *(Implementation note: Perform cross-currency conversion $\text{CC} \to \text{UAH} \to \text{EUR}$ without premature intermediate rounding if exact precision is needed, or round $A_{\text{EUR}}$ to 2 decimal places `ROUND_HALF_UP` before applying thresholds; test cases in §5 use exact terminating ratios so both orders agree.)*
 
 ### 3.3 Caching & Fallback Specification (`backend/`)
-1. **Tier 1 — Live NBU Fetch + Daily Cache:** Fetch rates from the NBU endpoint (HTTP timeout $\le 3\text{ s}$) and cache them in memory + database keyed by Kyiv date (`YYYY-MM-DD`, timezone `Europe/Kyiv`), refreshing once per day (or TTL 6 hours). Return `rate_source: "nbu_live"` (or `"nbu_cached"` when served from today's fresh cache).
-2. **Tier 2 — Stale DB Cache Fallback:** If the NBU API is unreachable, returns non-200, or times out, serve the most recent persisted rate snapshot from the database and return `rate_source: "nbu_stale_cache"` alongside `rate_date`.
-3. **Tier 3 — Static Cold-Start Fallback:** If the NBU API fails and no database snapshot exists yet, use the static baseline constants below and return `rate_source: "fallback"` so the frontend displays a warning banner:
-   - `EUR`: `45.00 UAH`
-   - `USD`: `41.50 UAH`
-   - `PLN`: `10.50 UAH`
-   - `GBP`: `53.00 UAH`
-   - `UAH`: `1.00 UAH`
+1. **Tier 1 — Live NBU Fetch + In-Memory Cache:** Fetch rates from the NBU endpoint (HTTP timeout $\le 3\text{ s}$) and cache them in memory (TTL `1 hour` in `backend/app/services/rates_service.py`, or daily `Europe/Kyiv` refresh). Return `rate_source: "nbu"`.
+2. **Tier 2 — Stale Cache Fallback:** If the NBU API is unreachable, returns non-200, or times out, serve the most recent valid cached NBU rate table if present.
+3. **Tier 3 — Static Cold-Start Fallback:** If the NBU API fails and no cached snapshot exists in memory, use static baseline fallback constants and return `rate_source: "fallback"` with a Ukrainian warning note so the frontend notifies the user.
 
 ---
 
@@ -155,20 +158,23 @@ Applies to passenger vehicles (UKTZED heading `8703`) imported into Ukraine.
 
 | Input Field | Type | Description |
 |---|---|---|
-| `customs_value_eur` ($V_{\text{EUR}}$) | `Decimal` | Vehicle customs value in EUR (purchase price + delivery/insurance to Ukrainian border) |
-| `engine_type` | `enum` | `"petrol"` (бензин), `"diesel"` (дизель), or `"electric"` (електромобіль) |
-| `engine_volume_cm3` ($E_{\text{cm3}}$) | `int` | Engine displacement in $\text{cm}^3$ (required for `petrol` and `diesel`) |
+| `car_price_eur` + `shipping_eur` ($V_{\text{EUR}}$) | `Decimal` | Vehicle customs value in EUR: `customs_value_eur = car_price_eur + shipping_eur` (purchase price + delivery/insurance to Ukrainian border) |
+| `engine_type` | `enum` | `"petrol"` (бензин), `"diesel"` (дизель), `"hybrid"` (гібрид), or `"electric"` (електромобіль) |
+| `engine_volume_cm3` ($E_{\text{cm3}}$) | `int` | Engine displacement in $\text{cm}^3$ (required for `petrol`, `diesel`, and `hybrid`) |
 | `battery_capacity_kwh` ($B_{\text{kWh}}$) | `Decimal` | Traction battery capacity in kWh (required for `electric`) |
 | `production_year` ($Y_{\text{prod}}$) | `int` | Vehicle manufacturing year (used with `current_year` $Y_{\text{curr}}$, default `2026`, to compute $K_{\text{age}}$) |
+| `origin` | `enum` | `"other"` (standard 10% duty) or `"eu"` (0% preferential duty under DCFTA **only** with EUR.1 / origin declaration) |
 
-*(Note: Hybrid vehicles with an internal combustion engine are taxed under the `petrol` or `diesel` formulas using their ICE displacement $E_{\text{cm3}}$ unless classified strictly as pure electric `8703 80`.)*
+*(Note: Under ПКУ Art. 215.3.5-1, spark-ignition `hybrid` vehicles have no separate flat excise rate; they pay excise by their internal combustion engine displacement $E_{\text{cm3}}$ using the `petrol` base rate. Diesel hybrids should select `engine_type = "diesel"`.)*
 
 ### 4.2 Customs Duty (Ввізне мито)
-- **Internal combustion vehicles (`petrol`, `diesel`):**
-  $$\text{Duty}_{\text{EUR}} = \text{round}_2(0.10 \times V_{\text{EUR}})$$
-  *(Note: Preferential EU EUR.1 certificate rates may reduce duty for qualifying EU-origin vehicles, but the statutory 10% rate is the MVP baseline used in calculations and the pitch.)*
-- **Electric vehicles (`electric`, UKTZED `8703 80`):**
-  $$\text{Duty}_{\text{EUR}} = 0.00$$
+- **Internal combustion & hybrid vehicles (`petrol`, `diesel`, `hybrid`):**
+  - If `origin == "other"` (standard rate, including EU-purchased non-EU-origin cars or cars without EUR.1):
+    $$\text{Duty}_{\text{EUR}} = \text{round}_2(0.10 \times V_{\text{EUR}})$$
+  - If `origin == "eu"` (documented EU origin via EUR.1 / origin declaration under EU-Ukraine DCFTA):
+    $$\text{Duty}_{\text{EUR}} = 0.00$$
+- **Electric vehicles (`electric`, UKTZED `8703 80 10 10` / `8703 90 10`):**
+  $$\text{Duty}_{\text{EUR}} = 0.00 \quad (\text{regardless of origin})$$
 
 ### 4.3 Excise Tax (Акцизний податок — ПКУ Art. 215.3.5-1)
 
@@ -201,24 +207,26 @@ $$\text{VAT}_{\text{EUR}} = \text{round}_2\Big(0.20 \times \big(V_{\text{EUR}} +
 
 - **EV VAT note (2026):** As of **1 January 2026**, the transitional VAT exemption for electric vehicles (ПКУ Subsection 2, Section XX, sub-clause 64) expired, so standard **20% VAT** applies to $(V_{\text{EUR}} + \text{Excise}_{\text{EUR}})$ in 2026. Historical 0% EV VAT applied only through 31 December 2025.
 
-### 4.5 Total Tax & Total Landed Price
+### 4.5 Total Tax, Landed Price & Exclusions
 $$\text{Total Tax}_{\text{EUR}} = \text{Duty}_{\text{EUR}} + \text{Excise}_{\text{EUR}} + \text{VAT}_{\text{EUR}}$$
 $$\text{Total Landed Price}_{\text{EUR}} = V_{\text{EUR}} + \text{Total Tax}_{\text{EUR}}$$
 
+*(Not included in customs tax total: Pension Fund levy on first registration in Ukraine (3–5%), vehicle certification, and customs broker fees.)*
+
 ### 4.6 Pitch Consistency Check (`€10,000 car → €2,048–€4,640 in taxes`)
-- **Lower bound (`€2,048.00`) — Electric car (`€10,000`, `40 kWh` battery):**
+- **Lower bound (`€2,048.00`) — Electric car (`€10,000`, `40 kWh` battery) OR new EU-origin 0.8L petrol (`origin="eu"`, $K_{\text{age}}=1$):**
   - $\text{Duty} = 0.00\text{ EUR}$
-  - $\text{Excise} = 1.00 \times 40 = 40.00\text{ EUR}$
+  - $\text{Excise} = 40.00\text{ EUR}$ (`1.00 × 40 kWh`, or `50 × 0.8 × 1`)
   - $\text{VAT} = 0.20 \times (10000 + 0 + 40) = 2008.00\text{ EUR}$
   - $\text{Total Tax} = \mathbf{2,048.00\text{ EUR}}$ ✔
-- **Mid ICE example (`€3,296.00`) — Petrol car (`€10,000`, $1600\text{ cm}^3$, $K_{\text{age}} = 1$):**
+- **Mid ICE example (`€3,296.00`) — Non-EU petrol car (`€10,000`, $1600\text{ cm}^3$, $K_{\text{age}} = 1$):**
   - $\text{Duty} = 0.10 \times 10000 = 1000.00\text{ EUR}$
   - $\text{Excise} = 50 \times 1.6 \times 1 = 80.00\text{ EUR}$
   - $\text{VAT} = 0.20 \times (10000 + 1000 + 80) = 2216.00\text{ EUR}$
   - $\text{Total Tax} = \mathbf{3,296.00\text{ EUR}}$ ✔
-- **Upper bound (`€4,640.00`) — Diesel car (`€10,000`, $2000\text{ cm}^3$, $K_{\text{age}} = 8$):**
+- **Upper bound (`€4,640.00`) — Non-EU diesel (`€10,000`, $2000\text{ cm}^3$, $K_{\text{age}} = 8$) OR 2013 non-EU petrol (`€10,000`, $2000\text{ cm}^3$, $K_{\text{age}} = 12$):**
   - $\text{Duty} = 0.10 \times 10000 = 1000.00\text{ EUR}$
-  - $\text{Excise} = 75 \times 2.0 \times 8 = 1200.00\text{ EUR}$
+  - $\text{Excise} = 1200.00\text{ EUR}$ (`75 × 2.0 × 8`, or `50 × 2.0 × 12`)
   - $\text{VAT} = 0.20 \times (10000 + 1000 + 1200) = 2440.00\text{ EUR}$
   - $\text{Total Tax} = \mathbf{4,640.00\text{ EUR}}$ ✔
 
@@ -232,17 +240,19 @@ All 10 test cases below use a deterministic reference NBU rate fixture so unit t
 - `UAH = 1.00 UAH`
 - `current_year = 2026` (for car age calculation)
 
-### 5.1 Parcel Test Cases (Current Rules vs. July 2027 Rules)
+### 5.1 Parcel Test Cases (Current Rules vs. July 2027 Rules, `sender = "marketplace"`)
+
+*(Note: Under July 2027 Laws № 5025-IX / № 5026-IX, parcels `> €150` are unchanged from today, while marketplace parcels `≤ €150` pay 20% VAT on `goods_value_eur` and private P2P gifts `≤ €45` remain exempt.)*
 
 | ID | Description | Input (`item_price`, `shipping`, `currency`, `category`) | Current Rules (`duty`, `vat`, `total_tax`, `landed_eur`) | July 2027 Rules (`duty`, `vat`, `total_tax`, `landed_eur`) |
 |---|---|---|---|---|
 | **TC-P1** | Under €150 threshold | `120.00`, `15.00`, `EUR`, `electronics` | `0.00`, `0.00`, **`0.00`**, `135.00` (`6075.00 UAH`) | `0.00`, `24.00`, **`24.00`**, `159.00` (`7155.00 UAH`) |
 | **TC-P2** | Exact €150 boundary | `150.00`, `10.00`, `EUR`, `clothing` | `0.00`, `0.00`, **`0.00`**, `160.00` (`7200.00 UAH`) | `0.00`, `30.00`, **`30.00`**, `190.00` (`8550.00 UAH`) |
-| **TC-P3** | Pitch benchmark (€200) | `200.00`, `20.00`, `EUR`, `electronics` | `5.00`, `11.00`, **`16.00`**, `236.00` (`10620.00 UAH`) | `5.00`, `41.00`, **`46.00`**, `266.00` (`11970.00 UAH`) |
-| **TC-P4** | USD conversion (`$300` → `€276`) | `300.00`, `25.00`, `USD`, `clothing` | `12.60`, `27.72`, **`40.32`**, `339.32` (`15269.40 UAH`) | `12.60`, `57.72`, **`70.32`**, `369.32` (`16619.40 UAH`) |
-| **TC-P5** | High-value parcel (€1,000) | `1000.00`, `40.00`, `EUR`, `electronics` | `85.00`, `187.00`, **`272.00`**, `1312.00` (`59040.00 UAH`) | `85.00`, `217.00`, **`302.00`**, `1342.00` (`60390.00 UAH`) |
+| **TC-P3** | Pitch benchmark (€200) | `200.00`, `20.00`, `EUR`, `electronics` | `5.00`, `11.00`, **`16.00`**, `236.00` (`10620.00 UAH`) | `5.00`, `11.00`, **`16.00`**, `236.00` (`10620.00 UAH`) |
+| **TC-P4** | USD conversion (`$300` → `€276`) | `300.00`, `25.00`, `USD`, `clothing` | `12.60`, `27.72`, **`40.32`**, `339.32` (`15269.40 UAH`) | `12.60`, `27.72`, **`40.32`**, `339.32` (`15269.40 UAH`) |
+| **TC-P5** | High-value parcel (€1,000) | `1000.00`, `40.00`, `EUR`, `electronics` | `85.00`, `187.00`, **`272.00`**, `1312.00` (`59040.00 UAH`) | `85.00`, `187.00`, **`272.00`**, `1312.00` (`59040.00 UAH`) |
 
-### 5.2 Passenger Car Test Cases (`current_year = 2026`)
+### 5.2 Passenger Car Test Cases (`current_year = 2026`, `origin = "other"`)
 
 | ID | Description | Input (`customs_value_eur`, `engine_type`, `volume_cm3` / `kwh`, `production_year`, `K_age`) | `duty_eur` | `excise_eur` | `vat_eur` | `total_tax_eur` (`total_tax_uah`) | `total_landed_eur` (`total_landed_uah`) |
 |---|---|---|---|---|---|---|---|
@@ -265,7 +275,7 @@ All 10 test cases below use a deterministic reference NBU rate fixture so unit t
   "parcel_cases": [
     {
       "id": "TC-P1",
-      "input": { "item_price": "120.00", "shipping_cost": "15.00", "currency": "EUR", "category": "electronics" },
+      "input": { "item_price": "120.00", "shipping_cost": "15.00", "currency": "EUR", "category": "electronics", "sender": "marketplace" },
       "expected": {
         "item_value_eur": "120.00",
         "shipping_eur": "15.00",
@@ -275,7 +285,7 @@ All 10 test cases below use a deterministic reference NBU rate fixture so unit t
     },
     {
       "id": "TC-P2",
-      "input": { "item_price": "150.00", "shipping_cost": "10.00", "currency": "EUR", "category": "clothing" },
+      "input": { "item_price": "150.00", "shipping_cost": "10.00", "currency": "EUR", "category": "clothing", "sender": "marketplace" },
       "expected": {
         "item_value_eur": "150.00",
         "shipping_eur": "10.00",
@@ -285,59 +295,59 @@ All 10 test cases below use a deterministic reference NBU rate fixture so unit t
     },
     {
       "id": "TC-P3",
-      "input": { "item_price": "200.00", "shipping_cost": "20.00", "currency": "EUR", "category": "electronics" },
+      "input": { "item_price": "200.00", "shipping_cost": "20.00", "currency": "EUR", "category": "electronics", "sender": "marketplace" },
       "expected": {
         "item_value_eur": "200.00",
         "shipping_eur": "20.00",
         "current_rules": { "excess_eur": "50.00", "duty_eur": "5.00", "vat_eur": "11.00", "total_tax_eur": "16.00", "total_tax_uah": "720.00", "total_landed_eur": "236.00", "total_landed_uah": "10620.00" },
-        "july_2027_rules": { "excess_eur": "50.00", "duty_eur": "5.00", "vat_eur": "41.00", "total_tax_eur": "46.00", "total_tax_uah": "2070.00", "total_landed_eur": "266.00", "total_landed_uah": "11970.00" }
+        "july_2027_rules": { "excess_eur": "50.00", "duty_eur": "5.00", "vat_eur": "11.00", "total_tax_eur": "16.00", "total_tax_uah": "720.00", "total_landed_eur": "236.00", "total_landed_uah": "10620.00" }
       }
     },
     {
       "id": "TC-P4",
-      "input": { "item_price": "300.00", "shipping_cost": "25.00", "currency": "USD", "category": "clothing" },
+      "input": { "item_price": "300.00", "shipping_cost": "25.00", "currency": "USD", "category": "clothing", "sender": "marketplace" },
       "expected": {
         "item_value_eur": "276.00",
         "shipping_eur": "23.00",
         "current_rules": { "excess_eur": "126.00", "duty_eur": "12.60", "vat_eur": "27.72", "total_tax_eur": "40.32", "total_tax_uah": "1814.40", "total_landed_eur": "339.32", "total_landed_uah": "15269.40" },
-        "july_2027_rules": { "excess_eur": "126.00", "duty_eur": "12.60", "vat_eur": "57.72", "total_tax_eur": "70.32", "total_tax_uah": "3164.40", "total_landed_eur": "369.32", "total_landed_uah": "16619.40" }
+        "july_2027_rules": { "excess_eur": "126.00", "duty_eur": "12.60", "vat_eur": "27.72", "total_tax_eur": "40.32", "total_tax_uah": "1814.40", "total_landed_eur": "339.32", "total_landed_uah": "15269.40" }
       }
     },
     {
       "id": "TC-P5",
-      "input": { "item_price": "1000.00", "shipping_cost": "40.00", "currency": "EUR", "category": "electronics" },
+      "input": { "item_price": "1000.00", "shipping_cost": "40.00", "currency": "EUR", "category": "electronics", "sender": "marketplace" },
       "expected": {
         "item_value_eur": "1000.00",
         "shipping_eur": "40.00",
         "current_rules": { "excess_eur": "850.00", "duty_eur": "85.00", "vat_eur": "187.00", "total_tax_eur": "272.00", "total_tax_uah": "12240.00", "total_landed_eur": "1312.00", "total_landed_uah": "59040.00" },
-        "july_2027_rules": { "excess_eur": "850.00", "duty_eur": "85.00", "vat_eur": "217.00", "total_tax_eur": "302.00", "total_tax_uah": "13590.00", "total_landed_eur": "1342.00", "total_landed_uah": "60390.00" }
+        "july_2027_rules": { "excess_eur": "850.00", "duty_eur": "85.00", "vat_eur": "187.00", "total_tax_eur": "272.00", "total_tax_uah": "12240.00", "total_landed_eur": "1312.00", "total_landed_uah": "59040.00" }
       }
     }
   ],
   "car_cases": [
     {
       "id": "TC-C1",
-      "input": { "customs_value": "10000.00", "currency": "EUR", "engine_type": "electric", "battery_capacity_kwh": "40", "production_year": 2022 },
+      "input": { "car_price": "10000.00", "shipping_price": "0.00", "currency": "EUR", "engine_type": "electric", "battery_capacity_kwh": "40", "production_year": 2022, "origin": "other" },
       "expected": { "k_age": 3, "duty_eur": "0.00", "excise_eur": "40.00", "vat_eur": "2008.00", "total_tax_eur": "2048.00", "total_tax_uah": "92160.00", "total_landed_eur": "12048.00", "total_landed_uah": "542160.00" }
     },
     {
       "id": "TC-C2",
-      "input": { "customs_value": "10000.00", "currency": "EUR", "engine_type": "petrol", "engine_volume_cm3": 1600, "production_year": 2024 },
+      "input": { "car_price": "10000.00", "shipping_price": "0.00", "currency": "EUR", "engine_type": "petrol", "engine_volume_cm3": 1600, "production_year": 2024, "origin": "other" },
       "expected": { "k_age": 1, "duty_eur": "1000.00", "excise_eur": "80.00", "vat_eur": "2216.00", "total_tax_eur": "3296.00", "total_tax_uah": "148320.00", "total_landed_eur": "13296.00", "total_landed_uah": "598320.00" }
     },
     {
       "id": "TC-C3",
-      "input": { "customs_value": "10000.00", "currency": "EUR", "engine_type": "diesel", "engine_volume_cm3": 2000, "production_year": 2017 },
+      "input": { "car_price": "10000.00", "shipping_price": "0.00", "currency": "EUR", "engine_type": "diesel", "engine_volume_cm3": 2000, "production_year": 2017, "origin": "other" },
       "expected": { "k_age": 8, "duty_eur": "1000.00", "excise_eur": "1200.00", "vat_eur": "2440.00", "total_tax_eur": "4640.00", "total_tax_uah": "208800.00", "total_landed_eur": "14640.00", "total_landed_uah": "658800.00" }
     },
     {
       "id": "TC-C4",
-      "input": { "customs_value": "15000.00", "currency": "EUR", "engine_type": "petrol", "engine_volume_cm3": 3500, "production_year": 2020 },
+      "input": { "car_price": "15000.00", "shipping_price": "0.00", "currency": "EUR", "engine_type": "petrol", "engine_volume_cm3": 3500, "production_year": 2020, "origin": "other" },
       "expected": { "k_age": 5, "duty_eur": "1500.00", "excise_eur": "1750.00", "vat_eur": "3650.00", "total_tax_eur": "6900.00", "total_tax_uah": "310500.00", "total_landed_eur": "21900.00", "total_landed_uah": "985500.00" }
     },
     {
       "id": "TC-C5",
-      "input": { "customs_value": "8000.00", "currency": "EUR", "engine_type": "diesel", "engine_volume_cm3": 4000, "production_year": 2007 },
+      "input": { "car_price": "8000.00", "shipping_price": "0.00", "currency": "EUR", "engine_type": "diesel", "engine_volume_cm3": 4000, "production_year": 2007, "origin": "other" },
       "expected": { "k_age": 15, "duty_eur": "800.00", "excise_eur": "9000.00", "vat_eur": "3560.00", "total_tax_eur": "13360.00", "total_tax_uah": "601200.00", "total_landed_eur": "21360.00", "total_landed_uah": "961200.00" }
     }
   ]
