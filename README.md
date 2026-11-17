@@ -23,11 +23,16 @@ PidKlyuch makes that cost visible before you buy.
 Deadline: **Thursday 19 November 2026**, live demo. Every member submits individually: the repo link, the demo URL,
 and the report PDF.
 
-### 👤 Liubomyr Voskalo: Backend & Auth  (`backend/`)
+### 👤 Liubomyr Voskalo: Backend, Auth & Customs Rules  (`backend/`)
 - Set up the backend project, database, and data models (User, Calculation).
 - **Auth:** sign-up, sign-in, sign-out, password hashing, sessions or JWT, protected routes.
-- **Calculation engine:** implement the parcel and car customs formulas from Anton's spec (`docs/customs-rules.md`)
-  in one backend module, with unit tests built from Anton's test cases.
+- **Customs rules research:** check the current rules for parcels and cars and the July 2027 parcel rules against
+  official sources (Customs Code, Tax Code, new laws), and keep every rate in one data file,
+  [`backend/app/customs/tax_rates.json`](backend/app/customs/tax_rates.json), with its source.
+- **Calculation engine:** implement the parcel and car formulas in one backend module, with unit tests built from
+  hand-calculated cases.
+- **Law watcher:** a script that reports when the law text behind the rates changes
+  (`backend/scripts/check_law_updates.py`).
 - **Exchange rates:** fetch NBU daily rates, cache them, and keep a fallback when the NBU API is down.
 - **History:** save calculations for signed-in users and return them in a list endpoint.
 - **API contract:** write the list of endpoints in `AGENTS.md` §8 on **day 1**, so Anna can build the UI against it.
@@ -44,12 +49,9 @@ and the report PDF.
 - UI text in Ukrainian.
 - Apply the UX fixes from user feedback on Wednesday.
 
-### 👤 Anton Vertyporoh: Infra, Customs Rules, User Testing & Report  (`infra/`, `docs/`)
-- **Infra:** Dockerfiles / compose, hosting, domain, and **HTTPS**. Deploy a "hello world" on **day 1**, then
-  redeploy as features land. Optional CI that runs the backend tests.
-- **Customs rules research:** write `docs/customs-rules.md` with the exact current rules for parcels and cars, the
-  July 2027 parcel rules, and official sources. Include **10+ worked test cases** (input → expected output) that
-  Liubomyr turns into unit tests.
+### 👤 Anton Vertyporoh: Infra, User Testing & Report  (`infra/`, `docs/`)
+- **Infra (AWS):** pick the AWS services for the backend (container from `backend/Dockerfile`), RDS Postgres, frontend hosting, and **HTTPS**. Put the setup in `infra/`. Deploy a "hello world" on **day 1**, then redeploy as features land. Optional CI (e.g. GitHub Actions → ECR) that runs the backend tests, plus a weekly run of the law watcher
+  (`python scripts/check_law_updates.py`; exit code ≠ 0 means a law changed, so alert the team).
 - **User testing coordination:** feedback form (Google Form), testing script, and a shared table of testers and
   their feedback.
 - **Report (PDF):** who tried it, how many people, what they said, what we changed, and donation evidence (screenshots).
@@ -66,8 +68,8 @@ and the report PDF.
 
 | Day | Liubomyr (backend) | Anna (frontend) | Anton (infra/docs) |
 |---|---|---|---|
-| **Mon 16** | Agree on stack together · scaffold backend · write API contract | Agree on stack · scaffold frontend · page layout | Agree on stack · hello-world deploy over HTTPS · start customs rules research |
-| **Tue 17** | Auth + parcel/car calculation + NBU rates · deployed | Auth pages + calculator flow + result page, connected to the API | Finish `customs-rules.md` + test cases · feedback form · recruit testers |
+| **Mon 16** | Agree on stack together · scaffold backend · write API contract · verify customs rules | Agree on stack · scaffold frontend · page layout | Agree on stack · hello-world deploy on AWS over HTTPS |
+| **Tue 17** | Auth + parcel/car calculation + NBU rates · deployed | Auth pages + calculator flow + result page, connected to the API | Backend deploy on AWS · feedback form · recruit testers |
 | **Wed 18** | Morning: history + fixes · afternoon: fixes from feedback | Morning: history + donation · afternoon: fixes from feedback | **User testing sessions (all members)** · collect feedback · start the report |
 | **Thu 19** | Final bug fixes, freeze in the morning | Final polish | Finish report PDF, README run/deploy · **demo** · everyone submits |
 
@@ -89,8 +91,36 @@ AGENTS.md   Shared context and work log for AI agents: read first, update after 
 
 ## How to run locally
 
-_TBD: filled in once the stack is chosen (prerequisites, env vars from `.env.example`, commands for backend and frontend)._
+### Backend (Python 3.12+)
+
+```bash
+cd backend
+python3 -m venv .venv
+.venv/bin/pip install -r requirements-dev.txt
+cp .env.example .env            # defaults work locally (SQLite file pidklyuch.db)
+.venv/bin/uvicorn app.main:app --reload
+```
+
+- API: http://localhost:8000/api/health
+- Interactive API docs (try every endpoint): http://localhost:8000/docs
+- Tests: `.venv/bin/pytest`
+- With Docker instead: `docker build -t pidklyuch-backend backend && docker run -p 8000:8000 pidklyuch-backend`
+
+The API endpoints and the request/response formats are described in [`AGENTS.md`](AGENTS.md) §8.
+
+### Frontend
+
+_TBD (Anna)._
 
 ## How to deploy
 
-_TBD: hosting provider, how HTTPS is set up, deploy commands, required environment variables._
+Everything is hosted on **AWS**: the backend container, **RDS PostgreSQL**, and the frontend with HTTPS. _TBD (Anton): the exact services, how HTTPS is set up, and deploy commands (see `infra/`)._
+
+The backend is a single Docker image (`backend/Dockerfile`, listens on `$PORT`) and needs these environment
+variables in production:
+
+| Variable | Example |
+|---|---|
+| `DATABASE_URL` | `postgresql://user:pass@<rds-endpoint>:5432/pidklyuch?sslmode=require` (RDS Postgres; never SQLite on AWS) |
+| `JWT_SECRET` | store in Secrets Manager / SSM; a long random string: `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
+| `CORS_ORIGINS` | the HTTPS URL of the frontend, e.g. `https://pidklyuch.example.com` |
