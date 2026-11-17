@@ -9,6 +9,11 @@
 		respond "OK" 200
 	}
 
+	handle /api/docs* {
+		uri strip_prefix /api
+		reverse_proxy backend:8000
+	}
+
 	handle /api/* {
 		reverse_proxy backend:8000
 	}

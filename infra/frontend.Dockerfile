@@ -1,5 +1,5 @@
 # Stage 1: Build static React / Vite SPA
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 
 WORKDIR /app
 
@@ -8,8 +8,9 @@ RUN npm ci
 
 COPY . .
 
-ARG VITE_API_URL=/api
-ENV VITE_API_URL=$VITE_API_URL
+# Leave empty when served behind Caddy on the same HTTPS origin (frontend already prefixes /api/...)
+ARG VITE_API_BASE_URL=""
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 
 RUN npm run build
 

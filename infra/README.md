@@ -24,7 +24,7 @@ Internet / Client (HTTPS :443, HTTP :80, HTTP/3 :443/udp)
 | `docker-compose.yml` | Full-stack orchestration (`db`, `backend`, `frontend`, `caddy`) plus optional `fallback` profile (`hello`) |
 | `Caddyfile` | Caddy v2 reverse-proxy config with automatic HTTPS (`{$DOMAIN:localhost}`) and upstream routing |
 | `backend.Dockerfile` | Production Python 3.12 FastAPI container with `/api/health` Docker `HEALTHCHECK` |
-| `frontend.Dockerfile` | Multi-stage Node 20 Vite build + lightweight Caddy static SPA server (`try_files {path} /index.html`) |
+| `frontend.Dockerfile` | Multi-stage Node 22 Vite build + lightweight Caddy static SPA server (`try_files {path} /index.html`) |
 | `.env.example` | Template for Compose, PostgreSQL, Caddy, and backend secrets/variables |
 | `Dockerfile` & `hello-world/` | Standalone static verification container used by the `fallback` profile |
 
@@ -45,7 +45,7 @@ docker compose --env-file infra/.env -f infra/docker-compose.yml up --build
 Verify:
 - App UI: `https://localhost`
 - API health: `https://localhost/api/health`
-- Swagger docs: `https://localhost/docs`
+- Swagger docs: `https://localhost/api/docs` (or `https://localhost/docs`)
 - Proxy health: `https://localhost/healthz` → `OK`
 
 ## Fallback Mode (Before `backend/` or `frontend/` Are Merged)
