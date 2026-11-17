@@ -156,7 +156,8 @@ Current state (update on every structural change):
 ```
 PidKlyuch/
 ├── docs/
-│   └── customs-rules.md    # Locked Ukrainian customs spec (parcels, cars, NBU rates, 10 test cases)
+│   ├── customs-rules.md    # Locked Ukrainian customs spec (parcels, cars, NBU rates, 10 test cases)
+│   └── user-testing-plan.md# Moderator script (2 tasks), Google Form questions, 15-tester tracker table
 ├── infra/
 │   ├── hello-world/
 │   │   └── index.html      # Fallback static status/landing page for HTTPS smoke test
@@ -264,6 +265,8 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - [x] Write the API contract in §8 (Liubomyr on `origin/liubomyr/backend`; synced into `AGENTS.md` §8).
 - [x] Write `docs/customs-rules.md` with verified rules, sources, and test cases (Anton — 2026-11-16; see `docs/customs-rules.md`).
 - [x] Fill in "How to run" and "How to deploy" in `README.md` (Anton — 2026-11-17; local Docker/dev + AWS EC2 Ubuntu `sslip.io` HTTPS guide).
+- [x] Create user-testing script, Google Form questions, and master tester tracker (`docs/user-testing-plan.md`, Anton — 2026-11-17).
+- [ ] Run Wednesday user-testing sessions (15+ external testers, collect quotes, UX fixes, and donation screenshots) and write `docs/report.pdf` (all, Wed 18 – Thu 19 Nov).
 
 ---
 
@@ -392,6 +395,15 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **Decisions & why:** Recommended `<EC2-IP>.sslip.io` + Caddy v2 in `README.md` so the team gets zero-cost valid Let's Encrypt HTTPS certificates immediately on any EC2 public IP without buying a domain.
 - **How to verify / run:** Review `README.md` "How to run" and "How to deploy" sections.
 - **Not done / known problems / next steps:** Next step (Step 5) is creating `docs/user-testing-plan.md`.
+
+### 2026-11-17 11:25: Add user testing script, feedback form, and tracker template
+- **Who:** Anton Vertyporokh via Antigravity CLI
+- **Area:** docs
+- **What was done:** Created `docs/user-testing-plan.md` with: (1) a 10-minute Ukrainian moderator testing script covering 2 realistic tasks (Task 1: `$220 + $18` Amazon parcel with sign-up, EUR/UAH breakdown, formula check, and July 2027 comparison; Task 2: `€10,000` 2018 2.0L diesel / `€12,000` 60 kWh EV import + calculation history + volunteer donation flow), (2) 8 copy-pasteable Google Form feedback questions in Ukrainian, and (3) a 15-row master tester tracking table (`T-01`..`T-15`, 5 per team member) with columns for channel, profile, key quote, bug/UX issue, fix taken, and donation screenshot proof. Updated `AGENTS.md` §6, §11, and §12.
+- **Files touched:** `docs/user-testing-plan.md` (created), `AGENTS.md` (modified)
+- **Decisions & why:** Structured the script and Google Form around concrete grading evidence (task completion, verbatim quotes, Wednesday UX changes, and donation screenshots) to feed directly into `docs/report.pdf`.
+- **How to verify / run:** Review `docs/user-testing-plan.md` and copy questions from §3 into the team's Google Form.
+- **Not done / known problems / next steps:** Next step (Step 6) is creating `docs/recruiting-messages.md`.
 
 ---
 
