@@ -17,9 +17,9 @@
 | Course | OOAD (OOP), 2nd year, university team project |
 | Team | Liubomyr Voskalo, Anna Kravchenko, Anton Vertyporoh |
 | **Deadline** | **Thursday 19 November 2026 (Module 11)**: live demo + submission |
-| Current phase | Day 2 (Tue 17 Nov 2026): **backend & frontend MVPs merged in `main`** (`backend/` 66 tests; `frontend/` React 19 + TS + Vite + Tailwind v4); full-stack AWS Docker Compose + Caddy HTTPS config & user testing prep merged on `anton/infra-and-docs`; deploying full stack to active AWS project `334177992228` (`eu-north-1`) |
+| Current phase | Day 2 (Tue 17 Nov 2026): **Full-stack app live over HTTPS on AWS EC2** (`i-00ab50698f9435a50`, project `334177992228`, `eu-north-1`) with React 19 UI + FastAPI + PostgreSQL 16 + Caddy Let's Encrypt TLS; PR #3 (`anton/infra-and-docs`) ready to merge into `main`; user testing Wed 18 Nov |
 | Tech stack | Backend: Python 3.12+ / FastAPI + SQLAlchemy 2.0 (SQLite local, PostgreSQL 16 prod). Frontend: React 19 + TypeScript + Vite + Tailwind CSS v4. Hosting: AWS EC2 + Docker Compose + Caddy v2 (see §5) |
-| Live demo URL | https://13.60.162.78.sslip.io _(transitional fallback HTTPS page on legacy account; full-stack URL on `334177992228` pending Step 3 deploy)_ |
+| Live demo URL | https://16.170.212.120.sslip.io _(full-stack React SPA + FastAPI + PostgreSQL 16 over Let's Encrypt HTTPS on AWS EC2 `i-00ab50698f9435a50`; Swagger UI at `/api/docs`)_ |
 | Repo URL | https://github.com/voskalo/PidKlyuch (`main` has `backend/` + `frontend/`; `anton/infra-and-docs` merges `main` + `infra/` + `docs/`) |
 
 ---
@@ -112,7 +112,7 @@ Submit:
 | Criterion | Points | Status |
 |---|---|---|
 | Repo organised with top-level `backend/`, `frontend/`, `infra/` and a `README.md` that tells a stranger what the product is and how to run and deploy it | 3 | ✅ `backend/`, `frontend/`, `infra/`, `docs/`, and `README.md` complete |
-| Working prototype with sign-in: deployed, reachable over **HTTPS**, users can **sign up and sign in** | 3 | 🟡 Full-stack code merged; deploying full stack to active AWS EC2 (`334177992228`, `eu-north-1`) |
+| Working prototype with sign-in: deployed, reachable over **HTTPS**, users can **sign up and sign in** | 3 | ✅ Live at `https://16.170.212.120.sslip.io` (AWS EC2 `i-00ab50698f9435a50`, Let's Encrypt HTTPS + React + FastAPI + Postgres 16) |
 | Report with user feedback: who you showed it to, how many tried it, what they said, **what you changed because of it** | 4 | 🟡 User testing script, Google Form & recruiting templates ready; sessions Wed 18 Nov |
 | **Bonus:** users ready to pay real money (donation to a volunteer cause, or a working payment in the product), with **evidence in the report** | bonus | ⬜ Donation modal ready in UI; collect screenshots during Wed testing |
 
@@ -456,6 +456,15 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **Decisions & why:** `frontend/src/services/api.ts` reads `VITE_API_BASE_URL` and already prefixes `/api/...`, so leaving `VITE_API_BASE_URL=""` routes browser API calls to the same Caddy HTTPS origin cleanly; Node 22 satisfies Vite 8's engine constraint.
 - **How to verify / run:** `! git grep -E '^(<<<<<<<|=======|>>>>>>>)'` and `cd backend && .venv/bin/pytest`.
 - **Not done / known problems / next steps:** Push `anton/infra-and-docs`, provision EC2 on active AWS account `334177992228` (`eu-north-1`), deploy full-stack Compose app, and verify HTTPS endpoints.
+
+### 2026-11-17 17:17: Deploy full-stack PidKlyuch on active AWS project `334177992228` over HTTPS
+- **Who:** Anton Vertyporokh via Antigravity CLI
+- **Area:** infra / docs
+- **What was done:** Provisioned Ubuntu 24.04 `t3.micro` EC2 instance (`i-00ab50698f9435a50`, public IP `16.170.212.120`) on active AWS project `334177992228` (`main-aws`, `eu-north-1`) with Security Group `sg-0921755abdeb9049f` (TCP `22`, `80`, `443` + UDP `443`), imported SSH key `pidklyuch-ec2` (`key-0bb3845d47275c9b2` from `~/.ssh/pidklyuch-ec2.pem`), configured 2 GB `/swapfile` for Node 22/Vite builds, generated `infra/.env` with random `JWT_SECRET`/`POSTGRES_PASSWORD` and `DOMAIN=16.170.212.120.sslip.io`, and launched full-stack Docker Compose (`db` Postgres 16, `backend` FastAPI, `frontend` React 19 SPA, `caddy` v2). Verified all endpoints over Let's Encrypt HTTPS. Updated `AGENTS.md` (§0, §4, §11, §12) and `README.md` (Live demo URL).
+- **Files touched:** `AGENTS.md` (modified), `README.md` (modified)
+- **Decisions & why:** Added 2 GB swapfile in user-data so Node/Vite production builds stay well within memory on `t3.micro`; full-stack serves frontend and `/api/*` under a single Caddy HTTPS origin (`https://16.170.212.120.sslip.io`).
+- **How to verify / run:** `curl -i https://16.170.212.120.sslip.io/healthz` (`200 OK`), `curl -i https://16.170.212.120.sslip.io/api/health` (`200 OK`), `curl -s https://16.170.212.120.sslip.io/api/rates` (`200 OK`, live NBU), `curl -s -o /dev/null -w "%{http_code}" https://16.170.212.120.sslip.io/api/docs` (`200`), `curl -s -o /dev/null -w "%{http_code}" https://16.170.212.120.sslip.io/` (`200`), and `POST /api/calculate` (`200`, `taxes_total_eur: "16.00"`).
+- **Not done / known problems / next steps:** PR #3 ready to merge `anton/infra-and-docs` into `main`; run Wednesday user testing sessions with `https://16.170.212.120.sslip.io` and compile `docs/report.pdf`.
 
 ---
 

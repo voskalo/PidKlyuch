@@ -13,7 +13,7 @@ PidKlyuch makes that cost visible before you buy.
 
 > OOAD course project by Liubomyr Voskalo, Anna Kravchenko, and Anton Vertyporoh.
 
-- **Live demo:** https://13.60.162.78.sslip.io _(transitional fallback HTTPS page on legacy account; active full-stack URL updated after deploy)_
+- **Live demo:** https://16.170.212.120.sslip.io _(API Swagger docs: https://16.170.212.120.sslip.io/api/docs)_
 - **Report:** _TBD (`docs/report.pdf`)_
 
 ---
