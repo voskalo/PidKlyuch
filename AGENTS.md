@@ -370,10 +370,10 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - [x] Create `backend/`, `frontend/`, `infra/`, `docs/` (`backend/` merged in PR #1; `frontend/` merged in PR #2; `infra/` & `docs/` merged into `anton/infra-and-docs`).
 - [x] Write the API contract in §8 and implement all backend endpoints (Liubomyr).
 - [x] Verify customs rates in `tax_rates.json` and finalize `docs/customs-rules.md` with 10 test cases (Liubomyr + Anton).
-- [x] Deploy fallback HTTPS stack on AWS EC2 (`i-0f47475721f5e04a5`, `13.60.162.78`, `https://13.60.162.78.sslip.io/healthz` verified `200 OK`); [ ] deploy full-stack (`backend` + `frontend` + `db` + `caddy`) on active AWS project `334177992228` (`eu-north-1`) over HTTPS.
+- [x] Deploy full-stack app (`db` + `backend` + `frontend` + `caddy`) on active AWS project `334177992228` (`eu-north-1`, EC2 `i-00ab50698f9435a50`, `https://16.170.212.120.sslip.io` verified `200 OK` across `/healthz`, `/api/health`, `/api/rates`, `/api/docs`, `/api/calculate`, `/api/stats`, and `/`).
 - [x] Fill in "How to run" and "How to deploy" in `README.md` (Anton + Liubomyr + Anna).
 - [x] Create user-testing script, Google Form questions, master tracker (`docs/user-testing-plan.md`), and Ukrainian recruiting templates (`docs/recruiting-messages.md`) (Anton).
-- [ ] Merge `anton/infra-and-docs` (PR #3) into `main` once full-stack HTTPS deploy is verified.
+- [ ] Merge `anton/infra-and-docs` (PR #3) into `main` (team review / merge).
 - [ ] Schedule `cd backend && python scripts/check_law_updates.py` weekly and alert team on non-zero exit (Anton).
 - [ ] Run Wednesday user-testing sessions (15+ external testers, collect quotes, UX fixes, and donation screenshots) and write `docs/report.pdf` (all, Wed 18 – Thu 19 Nov).
 
