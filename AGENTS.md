@@ -17,10 +17,10 @@
 | Course | OOAD (OOP), 2nd year, university team project |
 | Team | Liubomyr Voskalo, Anna Kravchenko, Anton Vertyporoh |
 | **Deadline** | **Thursday 19 November 2026 (Module 11)**: live demo + submission |
-| Current phase | Day 1: setup & scaffolding. Infra and customs rules spec in progress on `anton/infra-and-docs` |
-| Tech stack | **TBD.** Record it in §5 as soon as it is chosen |
-| Live demo URL | TBD (must be HTTPS) |
-| Repo URL | TBD |
+| Current phase | Day 2 (Tue 17 Nov 2026): Backend MVP implemented on `origin/liubomyr/backend` (66 pytest tests); full-stack AWS EC2 + Docker/Caddy HTTPS infra, locked customs spec, and user testing prep on `anton/infra-and-docs`; `frontend/` pending from Anna |
+| Tech stack | Python 3.12+ / FastAPI + SQLAlchemy (SQLite local, PostgreSQL prod) · React / Vite SPA · AWS EC2 + Docker Compose + Caddy v2 (see §5) |
+| Live demo URL | TBD (must be HTTPS — planned `https://<EC2-IP>.sslip.io`) |
+| Repo URL | https://github.com/voskalo/PidKlyuch (`origin/main` at docs baseline; `origin/liubomyr/backend` has backend PR #1; `anton/infra-and-docs` has infra & docs) |
 
 ---
 
@@ -134,17 +134,18 @@ Update the Status column above when a criterion is met.
 
 ## 5. Tech stack
 
-**Status: TBD.** Whoever decides fills this in and logs the decision in §10.
+**Confirmed 2026-11-17** (synced from `origin/liubomyr/backend` + team hosting plan; frontend branch pending Anna's push).
 
 | Layer | Choice | Notes |
 |---|---|---|
-| Backend language/framework | TBD | |
-| Database | TBD | |
-| Auth method | TBD | e.g. sessions vs JWT; passwords must be hashed |
-| Frontend framework | TBD | |
-| Hosting (backend) | TBD | Docker Compose + Caddy v2 (automatic HTTPS) |
-| Hosting (frontend) | TBD | Docker Compose + Caddy v2 (automatic HTTPS) |
-| CI | TBD | |
+| Backend language/framework | **Python 3.12+ / FastAPI** | `backend/`, entry point `app.main:app` (Uvicorn on `$PORT`, default `8000`, `--proxy-headers`) |
+| ORM / Database | **SQLAlchemy 2.0**: SQLite locally, **PostgreSQL 16** in prod | Set via `DATABASE_URL` (Compose `postgres:16-alpine` or AWS RDS Postgres); tables auto-created on startup via `init_db()` |
+| Auth method | **JWT Bearer tokens** (PyJWT, HS256) | Passwords hashed with stdlib PBKDF2-SHA256 (`390,000` iterations) |
+| Tests | **pytest** + FastAPI `TestClient` | `cd backend && .venv/bin/pytest` (66 tests on `origin/liubomyr/backend`) |
+| Frontend framework | **React / Vite SPA** (port `5173` dev; static build on port `80` behind Caddy in prod) | Consumes `/api/*` from §8; `CORS_ORIGINS` defaults include `http://localhost:5173,http://localhost:3000` |
+| Hosting (backend & frontend) | **AWS EC2 (Ubuntu 24.04)** + **Docker Compose + Caddy v2** (automatic HTTPS) | Single HTTPS origin via `<EC2-IP>.sslip.io` or custom domain; optional AWS RDS for PostgreSQL |
+| Secrets | `.env` locally / AWS Secrets Manager or SSM on EC2 | `JWT_SECRET`, DB credentials never in git |
+| CI / Automation | `backend/scripts/check_law_updates.py` + `pytest` | Weekly law-watcher script checking `zakon.rada.gov.ua` fingerprints against `tax_rates.json` |
 
 ---
 
@@ -186,15 +187,40 @@ PidKlyuch/
 
 Format: `NAME`: where it is used, example value (never a real secret), required or optional.
 
-- `DOMAIN`: `infra/docker-compose.yml` & `infra/Caddyfile` (site block host for automatic HTTPS), example `pidklyuch.example.com` or `localhost`, optional (defaults to `localhost`).
+### Infra & Reverse Proxy (`infra/`)
+- `DOMAIN`: `infra/docker-compose.yml` & `infra/Caddyfile` (site block host for automatic HTTPS), example `3-75-120-45.sslip.io` or `localhost`, optional (defaults to `localhost`).
 - `ACME_EMAIL`: `infra/docker-compose.yml` & `infra/Caddyfile` (Let's Encrypt / ACME notification email), example `admin@example.com`, optional (defaults to `admin@example.com`).
+- `POSTGRES_USER`: Postgres container (`db` service in `infra/docker-compose.yml`), example `pidklyuch`, optional locally.
+- `POSTGRES_PASSWORD`: Postgres container (`db` service in `infra/docker-compose.yml`), example `change-me-db-password`, **required in prod** when using local Compose Postgres.
+- `POSTGRES_DB`: Postgres container (`db` service in `infra/docker-compose.yml`), example `pidklyuch`, optional.
+
+### Backend (`backend/.env.example`, `backend/app/core/config.py`)
+- `DATABASE_URL`: backend, SQLAlchemy URL (`sqlite:///./pidklyuch.db` locally; `postgresql+psycopg://user:pass@host:5432/pidklyuch` or RDS URL with `?sslmode=require` in prod). Optional locally, **required in prod**.
+- `JWT_SECRET`: backend, signs HS256 auth tokens. **Required in prod** (default `dev-insecure-secret-change-me` is insecure).
+- `JWT_EXPIRE_MINUTES`: backend, token lifetime in minutes, default `10080` (7 days). Optional.
+- `CORS_ORIGINS`: backend, comma-separated allowed origins, default `http://localhost:5173,http://localhost:3000`, e.g. `https://pidklyuch.example.com`. **Required in prod** if frontend is on a separate origin.
+- `NBU_API_URL`: backend, NBU exchange-rate endpoint, default `https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json`. Optional.
+- `PASSWORD_HASH_ITERATIONS`: backend, PBKDF2 iterations, default `390000` (lowered only in tests). Optional.
+- `TAX_RATES_PATH`: backend, optional override path for `tax_rates.json` (default `app/customs/tax_rates.json`). Optional.
 
 ---
 
 ## 8. API contract (backend ↔ frontend)
 
-Not defined yet. Liubomyr's first task is to write the endpoint list here so Anna can build against mocks.
-For each endpoint: method, path, auth required?, request body, response body, error codes.
+Owner: Liubomyr (`origin/liubomyr/backend`). Base path: `/api`. JSON everywhere; interactive OpenAPI docs at `GET /docs` (Swagger). Auth uses `Authorization: Bearer <access_token>`. Monetary fields are serialized as 2-decimal strings (e.g. `"16.00"`). Full request/response schemas live on `origin/liubomyr/backend` (`backend/app/api/schemas_*.py` & `AGENTS.md` §8).
+
+| Status | Method | Path | Auth | Purpose |
+|---|---|---|---|---|
+| ✅ | GET | `/api/health` | – | Liveness check for deploy & Docker healthcheck |
+| ✅ | POST | `/api/auth/signup` | – | Create account (`email`, `password`, optional `name`) → `201` JWT + user |
+| ✅ | POST | `/api/auth/signin` | – | Sign in → `200` JWT + user (`401` on invalid credentials) |
+| ✅ | GET | `/api/auth/me` | required | Current authenticated user profile |
+| ✅ | POST | `/api/calculate` | optional | Calculate parcel (`sender`: `marketplace`/`private`, `rules`: `current`/`july_2027`) or car (`origin`: `eu`/`other`, `engine_type`: `petrol`/`diesel`/`hybrid`/`electric`); saves to DB (`calculation_id` non-null when signed in) |
+| ✅ | POST | `/api/calculate/compare-rules` | – | Parcel comparison: returns `{"current": <result>, "july_2027": <result>}` |
+| ✅ | GET | `/api/rates` | – | Live/cached/fallback NBU UAH rates (`EUR`, `USD`, `GBP`, `PLN`, `UAH`) |
+| ✅ | GET | `/api/history` | required | Signed-in user's saved calculations (max 100, newest first) |
+| ✅ | DELETE | `/api/history/{id}` | required | Delete one saved calculation (`204`, `404` if not found/owner) |
+| ✅ | GET | `/api/stats` | – | Aggregate usage counters (`users`, `calculations`, `calculations_by_signed_in`, `returning_users`) |
 
 ---
 
@@ -220,15 +246,17 @@ Format: `YYYY-MM-DD: decision: reason (who)`
   different AI agents. Most of them (Codex, Cursor, Copilot, Gemini CLI via config) read `AGENTS.md`, and Claude Code
   reads `CLAUDE.md`. (Liubomyr + Claude Code)
 - 2026-11-16: Use Docker Compose + Caddy v2 for deployment and automatic HTTPS: Caddy provisions and renews Let's Encrypt TLS certificates automatically with minimal config, meeting the mandatory HTTPS grading requirement. (Anton + Antigravity CLI)
+- 2026-11-17: Backend MVP implemented by Liubomyr on `origin/liubomyr/backend` using Python 3.12 / FastAPI + SQLAlchemy 2.0 + JWT (PBKDF2-SHA256) with all tax parameters centralized in `backend/app/customs/tax_rates.json` and monitored via `scripts/check_law_updates.py`. (Liubomyr via Claude Code; recorded on `anton/infra-and-docs` by Anton + Antigravity CLI)
+- 2026-11-17: Host full-stack deployment on AWS EC2 (Ubuntu 24.04) using Docker Compose + Caddy v2 with `<EC2-IP>.sslip.io` for zero-DNS-purchase automatic Let's Encrypt HTTPS, routing `/api/*` to FastAPI (`backend:8000`) and `/*` to the React/Vite static frontend (`frontend:80`) on a single origin so CORS issues are minimized. (Anton + Antigravity CLI)
 
 ---
 
 ## 11. Open issues / TODO
 
-- [ ] Choose the tech stack and fill in §5 (all, Mon 16 Nov).
-- [ ] Create `backend/`, `frontend/`, `infra/` skeletons (`infra/` done by Anton; `backend/`, `frontend/` pending).
-- [ ] Deploy a "hello world" over HTTPS on day 1 to find hosting problems early (compose + Caddy config ready in `infra/`; live VPS deploy pending hosting choice).
-- [ ] Write the API contract in §8 (Liubomyr).
+- [x] Choose the tech stack and fill in §5 (all — Backend FastAPI/SQLAlchemy on `origin/liubomyr/backend`, React/Vite SPA, AWS EC2 + Docker/Caddy HTTPS).
+- [ ] Create `backend/`, `frontend/`, `infra/` skeletons (`infra/` done by Anton; `backend/` done on `origin/liubomyr/backend`; `frontend/` pending Anna).
+- [ ] Deploy a "hello world" over HTTPS on day 1 to find hosting problems early (compose + Caddy config ready in `infra/`; live AWS EC2 deploy pending).
+- [x] Write the API contract in §8 (Liubomyr on `origin/liubomyr/backend`; synced into `AGENTS.md` §8).
 - [x] Write `docs/customs-rules.md` with verified rules, sources, and test cases (Anton — 2026-11-16; see `docs/customs-rules.md`).
 - [ ] Fill in "How to run" and "How to deploy" in `README.md` (Anton, with input from both other owners).
 
@@ -323,6 +351,15 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **Decisions & why:** Provided fixed test NBU rates (`EUR=45.00 UAH`, `USD=41.40 UAH`) and explicit `current_year=2026` in the JSON test fixture so Liubomyr's backend unit tests are 100% deterministic offline.
 - **How to verify / run:** Check all 10 cases in `docs/customs-rules.md` §5 against formulas in §1–§4 (note `TC-C1` = `€2,048` and `TC-C3` = `€4,640` match pitch bounds exactly).
 - **Not done / known problems / next steps:** Wait for team tech stack decision (§5) and Liubomyr's API contract (§8), then deploy live VPS over HTTPS and update `README.md` run/deploy sections.
+
+### 2026-11-17 11:12: Sync with main and document team tech stack
+- **Who:** Anton Vertyporokh via Antigravity CLI
+- **Area:** repo / docs
+- **What was done:** Ran `git fetch origin && git merge origin/main` (already up to date with `982757b`). Inspected `origin/liubomyr/backend` (`0b4851d`) read-only without merging `backend/` into `anton/infra-and-docs` (`backend/Dockerfile`, `backend/.env.example`, `backend/app/core/config.py`, `backend/app/customs/{tax_rates.json,rules.py,calculators.py}`, `backend/tests/test_customs.py`, `AGENTS.md`). Verified no `frontend/` branch exists on `origin` yet. Populated `AGENTS.md` §0, §5, §7, §8, §10, and §11 with the confirmed Python 3.12 / FastAPI + SQLAlchemy + JWT backend stack, React/Vite frontend expectation, AWS EC2 + Docker Compose + Caddy v2 (`sslip.io`) HTTPS hosting plan, environment variables, and §8 API endpoint summary.
+- **Files touched:** `AGENTS.md` (modified)
+- **Decisions & why:** Documented AWS EC2 + Docker Compose + Caddy v2 (`sslip.io` automatic HTTPS) in §10 and aligned §5/§7/§8 with `origin/liubomyr/backend` without touching `backend/` or `frontend/`.
+- **How to verify / run:** `git fetch origin && git merge origin/main` and inspect `AGENTS.md` §5, §7, §8.
+- **Not done / known problems / next steps:** Next step (Step 2) is resolving the remaining legal TODOs in `docs/customs-rules.md` against verified Laws № 5025-IX / № 5026-IX and `backend/app/customs/tax_rates.json`.
 
 ---
 
