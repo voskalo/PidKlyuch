@@ -1,12 +1,17 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
 class SignUpIn(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
     name: str | None = Field(default=None, max_length=100)
+
+    @field_validator("name")
+    @classmethod
+    def _blank_name_is_none(cls, v: str | None) -> str | None:
+        return v.strip() or None if v is not None else None
 
 
 class SignInIn(BaseModel):
