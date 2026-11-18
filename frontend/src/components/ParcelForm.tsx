@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import type {
   Currency,
-  ParcelCategory,
   ParcelCalculateRequest,
   RulesMode,
   ParcelSender,
@@ -12,11 +11,6 @@ import { api } from '../services/api';
 import { parseAmount } from '../utils/amount';
 import {
   Package,
-  Laptop,
-  Shirt,
-  Sparkles,
-  Gamepad2,
-  Box,
   Loader2,
   GitCompare,
   HelpCircle,
@@ -29,14 +23,6 @@ interface ParcelFormProps {
   onCompare: (comparison: CompareRulesResult) => void;
   onError: (err: string) => void;
 }
-
-const CATEGORIES: { id: ParcelCategory; label: string; icon: React.ElementType }[] = [
-  { id: 'electronics', label: 'Електроніка', icon: Laptop },
-  { id: 'clothing', label: 'Одяг та взуття', icon: Shirt },
-  { id: 'cosmetics', label: 'Косметика', icon: Sparkles },
-  { id: 'toys', label: 'Іграшки', icon: Gamepad2 },
-  { id: 'other', label: 'Інше', icon: Box },
-];
 
 const CURRENCY_OPTIONS: { code: Currency; symbol: string; label: string }[] = [
   { code: 'EUR', symbol: '€', label: '€ EUR' },
@@ -51,7 +37,6 @@ export const ParcelForm: React.FC<ParcelFormProps> = ({
   onCompare,
   onError,
 }) => {
-  const [category, setCategory] = useState<ParcelCategory>('electronics');
   const [itemPrice, setItemPrice] = useState<string>('200');
   const [shippingPrice, setShippingPrice] = useState<string>('15');
   const [currency, setCurrency] = useState<Currency>('EUR');
@@ -86,7 +71,6 @@ export const ParcelForm: React.FC<ParcelFormProps> = ({
       setLoading(true);
       const req: ParcelCalculateRequest = {
         delivery_type: 'parcel',
-        category,
         item_price: priceNum,
         shipping_price: shipNum,
         currency,
@@ -111,7 +95,6 @@ export const ParcelForm: React.FC<ParcelFormProps> = ({
       setComparing(true);
       const res = await api.compareRules({
         delivery_type: 'parcel',
-        category,
         item_price: priceNum,
         shipping_price: shipNum,
         currency,
@@ -127,41 +110,13 @@ export const ParcelForm: React.FC<ParcelFormProps> = ({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Category selector */}
-      <div>
-        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-          1. Категорія товару
-        </label>
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-          {CATEGORIES.map((cat) => {
-            const Icon = cat.icon;
-            const isSelected = category === cat.id;
-            return (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() => setCategory(cat.id)}
-                className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-all ${
-                  isSelected
-                    ? 'border-blue-600 bg-blue-50/70 text-blue-900 font-semibold shadow-sm'
-                    : 'border-slate-200 bg-white hover:border-slate-300 text-slate-600'
-                }`}
-              >
-                <Icon className={`w-5 h-5 mb-1.5 ${isSelected ? 'text-blue-600' : 'text-slate-400'}`} />
-                <span className="text-xs">{cat.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
       {/* Pricing inputs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Item price */}
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-              2. Вартість товару *
+              1. Вартість товару *
             </label>
             <span className="text-[11px] text-slate-400">інвойсна ціна</span>
           </div>
@@ -193,7 +148,7 @@ export const ParcelForm: React.FC<ParcelFormProps> = ({
             </div>
           </div>
           <p className="text-[11px] text-slate-500 mt-1">
-            Для посилок мито розраховується від фактурної вартості товарів
+            Будь-які товари рахуються однаково (ст. 374 МКУ), крім підакцизних — алкоголю, тютюну, рідин для е-сигарет
           </p>
         </div>
 
@@ -201,7 +156,7 @@ export const ParcelForm: React.FC<ParcelFormProps> = ({
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-              3. Вартість доставки
+              2. Вартість доставки
             </label>
             <span className="text-[11px] text-slate-400">до України</span>
           </div>
@@ -343,7 +298,7 @@ export const ParcelForm: React.FC<ParcelFormProps> = ({
               }`}
             >
               <div className="text-xs font-bold">Приватна особа</div>
-              <div className="text-[11px] text-slate-500">Подарунок (до €45)</div>
+              <div className="text-[11px] text-slate-500">Подарунок (з 2027: до €45)</div>
             </button>
           </div>
         </div>

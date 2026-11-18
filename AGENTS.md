@@ -120,7 +120,7 @@ Submit:
 
 **Demo MVP scope (must have by Wed evening):**
 - Sign up, sign in, sign out.
-- Calculator for **parcels** (category, price, shipping, currency) → itemized duty / VAT / total, with formulas shown.
+- Calculator for **parcels** (price, shipping, currency, sender) → itemized duty / VAT / total, with formulas shown. (No goods category since 18.11: MK 374 p.7 treats all non-excise goods the same.)
 - Calculator for **cars** (price, engine type/volume, year) → duty / excise / VAT / total.
 - "Today's rules vs. July 2027 rules" toggle or side-by-side for parcels.
 - Currency conversion using NBU rates (live, with a cached fallback).
@@ -315,10 +315,11 @@ exactly (case-sensitive, no trimming); otherwise `422` with `detail[].loc[-1] ==
 
 **POST /api/calculate**: body is either a parcel or a car (discriminated by `delivery_type`):
 ```json
-{"delivery_type": "parcel", "category": "electronics", "item_price": 200, "shipping_price": 15,
+{"delivery_type": "parcel", "item_price": 200, "shipping_price": 15,
  "currency": "EUR", "rules": "current", "sender": "marketplace"}
 ```
-- `category`: `electronics | clothing | cosmetics | toys | other`
+- `category` was **removed on 18.11**: customs rules for parcels do not depend on the kind of goods (MK 374 p.7 covers all
+  non-excise goods). Old clients may still send it; it is ignored. Excise goods (alcohol, tobacco) are out of scope.
 - `currency`: `EUR | USD | UAH | GBP | PLN`
 - `rules`: `current | july_2027` (default `current`)
 - `sender`: `marketplace | private` (default `marketplace`; only affects `july_2027`, where `private` $\le €45$ is tax-free)
@@ -329,7 +330,7 @@ exactly (case-sensitive, no trimming); otherwise `422` with `detail[].loc[-1] ==
 ```
 - `engine_type`: `petrol | diesel | hybrid | electric` (`engine_volume_cc` required for petrol/diesel/hybrid; `battery_kwh` required for electric)
 - `origin`: `eu | other` (`eu` = EUR.1 / origin declaration proved, 0% duty; EVs always have 0% duty)
-- `is_new`: optional `true | false` (since 18.11). Means "never used" in the Customs Tariff sense; it only matters for the 5% duty on new petrol/hybrid cars over 3000 cm³. If omitted, a car made in the current year or later counts as new.
+- `is_new`: optional `true | false` (since 18.11). Means "never used" in the Customs Tariff sense; it matters for the 5% duty on new petrol/hybrid cars over 3000 cm³ AND sets K_age = 1 for any new combustion car (TC 215.3.5-1, since 18.11). If omitted, a car made in the current year or later counts as new.
 
 Response `200`:
 ```json
@@ -447,6 +448,7 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - [x] Frontend: Ukrainian messages for 401/422/network errors and 2-decimal price handling (done 18.11 by Liubomyr, see §12).
 - [x] Frontend: "Нове авто" checkbox in `CarForm.tsx` that sends `is_new` (done 18.11 by Liubomyr, see §12).
 - [ ] In January 2027, re-check the EU-origin car duty rate for 2027 (source `dcfta_car_duty`) (Liubomyr).
+- [ ] Optional: model range-extender EVs (8703 80 x0 90: 8% duty, flat €100 excise, TC 215.3.5-1) as their own engine type; today the UI only warns (Liubomyr).
 
 ---
 
@@ -745,6 +747,62 @@ Format: `YYYY-MM-DD: decision: reason (who)`
   calculation saved — subtract it in the report), live bundle has the new UI texts, sign-up form checked in a browser
   (desktop + phone, no JS errors).
 
+
+### 2026-11-18 (evening): Second full re-check of the tax policy against the law texts; K_age = 1 for new cars
+- **Who:** Liubomyr Voskalo via Claude Code (Opus 5.5)
+- **Area:** backend / docs (customs rules), plus wording + `is_new` checkbox logic in Anna's `CarForm.tsx`
+- **What was done:** Re-read every rule in the official texts (TC rev. 01.11.2026, MK rev. 23.10.2026, Laws 5025-IX /
+  5026-IX, Customs Tariff 8703 table) and the 2026 EU-origin rates (State Customs Service letter of 22.12.2025, also
+  for 8703 24 10 00 and 8703 40 x). Law watcher: 11 `[ok]`.
+  - **Confirmed:** parcel ≤ €150 free; > €150: 10% duty on the excess (MK 374 p.7 "частина … що перевищує еквівалент
+    150 євро") and 20% VAT on (excess + duty) (TC 191.1.1, 193.1); July 2027: full value (Law 5026-IX item 19, Law
+    5025-IX item 6), €45 P2P gift (TC 197.30 new), start = 45 days after the Cabinet decision, not before 01.07.2027;
+    car excise bases 50/100 (petrol, ≤3000 incl.) and 75/150 (diesel, ≤3500 incl.), K_engine = cc/1000, K_age 1…15,
+    EV €1/kWh; hybrids pay by their combustion engine (the flat €100 is only for 8703 10 18, 8703 80 x0 90, 8703 90);
+    duty 10% / 5% (new petrol & petrol-hybrid > 3000 cm³) / 0% EV / 0% EU in 2026 (also on the 5% codes); no EV VAT
+    exemption in the TC any more → 20% VAT on EVs.
+  - **Fixed:** TC 215.3.5-1 says K_age = 1 "для нових транспортних засобів" whatever the year. The engine ignored
+    `is_new` for excise (a never-used 2022 car got K_age 3). `CarCalculator._excise` now uses 1 for new cars and says
+    "коеф. віку, нове авто" in the formula. The "Нове авто" checkbox in `CarForm.tsx` now also appears when it changes
+    K_age (any non-electric car with K_age > 1 by year), explains which effect applies, and the K_age preview follows it.
+  - **Not modeled, now explained in the UI + a car note in `tax_rates.json`:** diesel hybrids (8703 50/70 → choose
+    "Дизель", which gives the right numbers); range-extender EVs (8703 80 x0 90: 8% duty, €100 excise) — new §11 TODO.
+    Also not modeled (spec only): new motorhomes 1500–3000 cm³ at 5%.
+- **Files touched:** `backend/app/customs/{calculators.py,tax_rates.json}`, `backend/tests/{test_customs.py,
+  test_law_oracle.py}`, `frontend/src/components/CarForm.tsx`, `docs/customs-rules.md` (sources row, `is_new` row,
+  K_age section), `AGENTS.md` (§8 `is_new`, §11, §12, §13).
+- **Decisions & why:** K_age = 1 only when the car is new (explicit `is_new`, or made this year); with `is_new` omitted
+  nothing changes for existing API clients.
+- **How to verify / run:** `cd backend && .venv/bin/pytest` (172 passed); `.venv/bin/python scripts/check_law_updates.py`
+  (11 `[ok]`); `cd frontend && npm run build`; scratch Playwright suite 63/63 (adds: K_age 1 for a new 2014 diesel =
+  €150 excise vs €1650 used, checkbox texts, hybrid/EV hints).
+- **Not done / known problems / next steps:** not deployed yet (branch `liubomyr/tax-recheck-2`); range-extender EVs.
+
+
+### 2026-11-18 (evening): Removed the parcel goods category; €45 gift rule re-checked
+- **Who:** Liubomyr Voskalo via Claude Code (Opus 5.5)
+- **Area:** backend + frontend (cross-area: Anna's `ParcelForm.tsx`, `HistoryView.tsx`, `types/api.ts`; Anton's spec)
+- **What was done:**
+  - The category (electronics/clothing/cosmetics/toys/other) never changed any number: MK 374 p.7 taxes all non-excise
+    goods in a parcel the same way. Removed it from `ParcelIn` (old clients' `category` is ignored, test
+    `test_old_clients_category_is_accepted_and_ignored`), `ParcelInput`, `CalculationService`, the parcel form
+    (picker deleted, steps renumbered), `types/api.ts`, the history list, README, §4, §8 and the spec fixtures
+    (`docs/customs-rules.md` §5.1/§5.3). The form now says "Будь-які товари рахуються однаково (ст. 374 МКУ), крім
+    підакцизних — алкоголю, тютюну, рідин для е-сигарет"; the July 2027 rule set got the same excise note as today's.
+  - €45 gift rule: confirmed in Law 5025-IX, section I item 9 (new TC 197.30): VAT-free if ≤ €45, non-excise, one
+    private sender → one private recipient, one parcel, sent **without payment**, for personal needs. It is in items
+    6–9 that start 45 days after the Cabinet decision, not before 01.07.2027, so it is NOT valid today (today every
+    parcel ≤ €150 is tax-free anyway). The engine already applies it only under `july_2027`; the "Приватна особа"
+    button now says "Подарунок (з 2027: до €45)".
+- **Files touched:** `backend/app/{api/schemas_calc.py,customs/models.py,customs/tax_rates.json,services/calculation_service.py}`,
+  `backend/tests/{test_calculate_api.py,test_law_oracle.py}`, `frontend/src/{types/api.ts,components/ParcelForm.tsx,
+  components/HistoryView.tsx}`, `docs/customs-rules.md`, `README.md`, `AGENTS.md`.
+- **Decisions & why:** keep accepting (and ignoring) `category` instead of rejecting it, so old browser tabs and
+  saved history keep working.
+- **How to verify / run:** `cd backend && .venv/bin/pytest` (173 passed); `cd frontend && npm run build`; scratch
+  Playwright suite 65/65.
+- **Not done / known problems / next steps:** not deployed yet (branch `liubomyr/tax-recheck-2`).
+
 ---
 
 ## 13. Domain notes: Ukrainian customs (RE-VERIFIED 2026-11-18 against the official law texts)
@@ -760,7 +818,7 @@ All numbers live in `backend/app/customs/tax_rates.json` (verified against `zako
 
 **Cars (Tax Code 215.3.5-1, DCFTA):**
 - **Duty** (Customs Tariff 8703; customs value = car price + transport to the place of import, MK 58 p.10): **10%** for `origin = "other"`; **5% for NEW `petrol`/`hybrid` cars over 3000 cm³** (8703 24 10 00, 8703 40 10 80, 8703 60 10 80; "new" = optional `is_new`, else manufacture year ≥ current year); **0%** for `electric` (8703 80 x0 10); **0%** for `origin = "eu"` with EUR.1 / origin proof. That last rate is set per year: 0% for 01.01–31.12.2026 per State Customs Service letter 15/15-03-02/20836 of 22.12.2025, so re-check it in January 2027. UK/Canada/Israel/EFTA FTAs may also give 0%; this is not modeled.
-- **Excise:** `base × (cc / 1000) × K_age`, where `base` is `€50/€100` (`petrol` ≤3000 / >3000 cc) or `€75/€150` (`diesel` ≤3500 / >3500 cc), `hybrid` uses `petrol` rate, and `K_age = clamp(current_year − manufacture_year − 1, 1, 15)`. Electric (`8703 80`) = `€1/kWh`.
+- **Excise:** `base × (cc / 1000) × K_age`, where `base` is `€50/€100` (`petrol` ≤3000 / >3000 cc) or `€75/€150` (`diesel` ≤3500 / >3500 cc), `hybrid` uses `petrol` rate (petrol hybrids only; a diesel hybrid 8703 50/70 = choose `diesel`), and `K_age = clamp(current_year − manufacture_year − 1, 1, 15)`, but **`K_age = 1` for a new (never used) car whatever its year** (TC 215.3.5-1 "для нових транспортних засобів … коефіцієнт дорівнює 1"). Electric (`8703 80 x0 10`) = `€1/kWh`. Not modeled: range-extender EVs (8703 80 x0 90): 8% duty + flat €100 excise; the UI warns about them.
 - **VAT:** **20%** on `(customs_value + duty + excise)` (EV VAT exemption expired 01.01.2026). Pension Fund levy, certification, and broker fees excluded.
 - **Pitch check (€10,000 car):** EU new 0.8L petrol or 40 kWh EV → **€2,048.00**; 2013 non-EU 2.0L petrol ($K_{age}=12$) or 2.0L diesel ($K_{age}=8$) → **€4,640.00** ✔.
 

@@ -31,7 +31,7 @@ This document is the single source of truth for all customs duty, excise, and VA
 | **Laws № 5025-IX & № 5026-IX (15.10.2026)** | July 2027 parcel reform: ≤€150 → VAT 20% on the full value, no duty; P2P gifts ≤€45 VAT-free (ПКУ 197.30); **>€150 → duty 10% and VAT 20% on the FULL value** (Law 5026-IX item 19 rewrites МКУ 374 p.7; Law 5025-IX item 6 rewrites ПКУ 191.1.1) | https://zakon.rada.gov.ua/laws/show/5025-20 , https://zakon.rada.gov.ua/laws/show/5026-20 |
 | **Customs Code Art. 368** | Invoice value of citizens' goods; freight/insurance are added only for unaccompanied baggage and cargo shipments, so **shipping is not counted for postal/express parcels** | https://zakon.rada.gov.ua/laws/show/4495-17 |
 | **Tax Code Art. 191.1.1** | Today's VAT base for parcels of individuals: the part of the invoice value above €150 **plus the duty** | https://zakon.rada.gov.ua/laws/show/2755-17 |
-| **Customs Tariff (Law № 2697-IX), heading 8703** | 10% passenger car duty; **5% for new petrol cars and new petrol hybrids > 3000 cm³** (8703 24 10 00, 8703 40 10 80, 8703 60 10 80); 0% for electric cars (8703 80 x0 10) | https://zakon.rada.gov.ua/laws/show/2697б-20 |
+| **Customs Tariff (Law № 2697-IX), heading 8703** | 10% passenger car duty; **5% for new petrol cars and new petrol hybrids > 3000 cm³** (8703 24 10 00, 8703 40 10 80, 8703 60 10 80); 0% for electric cars (8703 80 x0 10). **Not modeled:** range-extender EVs (8703 80 x0 90: 8% duty, €100 excise per TC 215.3.5-1) and new motorhomes 1500–3000 cm³ (5%). Diesel hybrids (8703 50/70) = diesel rates (10%, diesel excise) | https://zakon.rada.gov.ua/laws/show/2697б-20 |
 | **EU-Ukraine Association Agreement (DCFTA)** | 0% duty for EU-origin cars in 2026 (State Customs Service letter № 15/15-03-02/20836 of 22.12.2025), only with EUR.1 / origin declaration; set per calendar year | https://www.qdpro.com.ua/goodinfo/8703239013 |
 | **State Budget Law 2026 (№ 4695-IX)** | Expiry of EV 0% VAT exemption as of 01.01.2026 (standard 20% VAT applies) | https://zakon.rada.gov.ua |
 | **State Customs Service of Ukraine** | Official guidance on postal/express parcel clearance & passenger car import | https://customs.gov.ua |
@@ -166,7 +166,7 @@ Applies to passenger vehicles (UKTZED heading `8703`) imported into Ukraine.
 | `battery_capacity_kwh` ($B_{\text{kWh}}$) | `Decimal` | Traction battery capacity in kWh (required for `electric`) |
 | `production_year` ($Y_{\text{prod}}$) | `int` | Vehicle manufacturing year (used with `current_year` $Y_{\text{curr}}$, default `2026`, to compute $K_{\text{age}}$) |
 | `origin` | `enum` | `"other"` (standard 10% duty) or `"eu"` (0% preferential duty under DCFTA **only** with EUR.1 / origin declaration) |
-| `is_new` | `bool?` | Optional. Customs Tariff "new" (never used). If omitted, a car made in the current year or later counts as new. Only affects the 5% rate below |
+| `is_new` | `bool?` | Optional. Customs Tariff "new" (never used). If omitted, a car made in the current year or later counts as new. Affects the 5% rate below and sets $K_{\text{age}} = 1$ |
 
 *(Note: Under ПКУ Art. 215.3.5-1, spark-ignition `hybrid` vehicles have no separate flat excise rate; they pay excise by their internal combustion engine displacement $E_{\text{cm3}}$ using the `petrol` base rate. Diesel hybrids should select `engine_type = "diesel"`.)*
 
@@ -200,6 +200,7 @@ where:
 3. **Age coefficient ($K_{\text{age}}$):**  
    Statutory Ukrainian rule counts full calendar years from the year **following** manufacture up to the year of customs clearance, with a minimum of `1` (for new and 1-year-old vehicles) and a maximum cap of `15`:
    $$K_{\text{age}} = \min\Big(15,\; \max\big(1,\; Y_{\text{curr}} - Y_{\text{prod}} - 1\big)\Big)$$
+   **A new (never used) car always has $K_{\text{age}} = 1$, whatever its production year** — TC 215.3.5-1: "для нових транспортних засобів … коефіцієнт дорівнює 1" (e.g. an unsold 2022 car cleared in 2026: $K_{\text{age}} = 1$, not 3).
    *(Deterministic API contract option: if the caller or unit test supplies `age_years` directly, apply $K_{\text{age}} = \min(15, \max(1, \text{age\_years}))$; when only `production_year` is given, use $Y_{\text{curr}} - Y_{\text{prod}} - 1$ clamped to $[1, 15]$.)*
 
 #### Electric Vehicles (`electric`)
@@ -248,13 +249,13 @@ All 10 test cases below use a deterministic reference NBU rate fixture so unit t
 
 *(Note: Under July 2027 Laws № 5025-IX / № 5026-IX, parcels `≤ €150` pay 20% VAT on `goods_value_eur` (private P2P gifts `≤ €45` exempt), and parcels `> €150` pay 10% duty and 20% VAT on the **full** value instead of only the excess.)*
 
-| ID | Description | Input (`item_price`, `shipping`, `currency`, `category`) | Current Rules (`duty`, `vat`, `total_tax`, `landed_eur`) | July 2027 Rules (`duty`, `vat`, `total_tax`, `landed_eur`) |
+| ID | Description | Input (`item_price`, `shipping`, `currency`) | Current Rules (`duty`, `vat`, `total_tax`, `landed_eur`) | July 2027 Rules (`duty`, `vat`, `total_tax`, `landed_eur`) |
 |---|---|---|---|---|
-| **TC-P1** | Under €150 threshold | `120.00`, `15.00`, `EUR`, `electronics` | `0.00`, `0.00`, **`0.00`**, `135.00` (`6075.00 UAH`) | `0.00`, `24.00`, **`24.00`**, `159.00` (`7155.00 UAH`) |
-| **TC-P2** | Exact €150 boundary | `150.00`, `10.00`, `EUR`, `clothing` | `0.00`, `0.00`, **`0.00`**, `160.00` (`7200.00 UAH`) | `0.00`, `30.00`, **`30.00`**, `190.00` (`8550.00 UAH`) |
-| **TC-P3** | Pitch benchmark (€200) | `200.00`, `20.00`, `EUR`, `electronics` | `5.00`, `11.00`, **`16.00`**, `236.00` (`10620.00 UAH`) | `20.00`, `44.00`, **`64.00`**, `284.00` (`12780.00 UAH`) |
-| **TC-P4** | USD conversion (`$300` → `€276`) | `300.00`, `25.00`, `USD`, `clothing` | `12.60`, `27.72`, **`40.32`**, `339.32` (`15269.40 UAH`) | `27.60`, `60.72`, **`88.32`**, `387.32` (`17429.40 UAH`) |
-| **TC-P5** | High-value parcel (€1,000) | `1000.00`, `40.00`, `EUR`, `electronics` | `85.00`, `187.00`, **`272.00`**, `1312.00` (`59040.00 UAH`) | `100.00`, `220.00`, **`320.00`**, `1360.00` (`61200.00 UAH`) |
+| **TC-P1** | Under €150 threshold | `120.00`, `15.00`, `EUR` | `0.00`, `0.00`, **`0.00`**, `135.00` (`6075.00 UAH`) | `0.00`, `24.00`, **`24.00`**, `159.00` (`7155.00 UAH`) |
+| **TC-P2** | Exact €150 boundary | `150.00`, `10.00`, `EUR` | `0.00`, `0.00`, **`0.00`**, `160.00` (`7200.00 UAH`) | `0.00`, `30.00`, **`30.00`**, `190.00` (`8550.00 UAH`) |
+| **TC-P3** | Pitch benchmark (€200) | `200.00`, `20.00`, `EUR` | `5.00`, `11.00`, **`16.00`**, `236.00` (`10620.00 UAH`) | `20.00`, `44.00`, **`64.00`**, `284.00` (`12780.00 UAH`) |
+| **TC-P4** | USD conversion (`$300` → `€276`) | `300.00`, `25.00`, `USD` | `12.60`, `27.72`, **`40.32`**, `339.32` (`15269.40 UAH`) | `27.60`, `60.72`, **`88.32`**, `387.32` (`17429.40 UAH`) |
+| **TC-P5** | High-value parcel (€1,000) | `1000.00`, `40.00`, `EUR` | `85.00`, `187.00`, **`272.00`**, `1312.00` (`59040.00 UAH`) | `100.00`, `220.00`, **`320.00`**, `1360.00` (`61200.00 UAH`) |
 
 ### 5.2 Passenger Car Test Cases (`current_year = 2026`, `origin = "other"`)
 
@@ -279,7 +280,7 @@ All 10 test cases below use a deterministic reference NBU rate fixture so unit t
   "parcel_cases": [
     {
       "id": "TC-P1",
-      "input": { "item_price": "120.00", "shipping_cost": "15.00", "currency": "EUR", "category": "electronics", "sender": "marketplace" },
+      "input": { "item_price": "120.00", "shipping_cost": "15.00", "currency": "EUR", "sender": "marketplace" },
       "expected": {
         "item_value_eur": "120.00",
         "shipping_eur": "15.00",
@@ -289,7 +290,7 @@ All 10 test cases below use a deterministic reference NBU rate fixture so unit t
     },
     {
       "id": "TC-P2",
-      "input": { "item_price": "150.00", "shipping_cost": "10.00", "currency": "EUR", "category": "clothing", "sender": "marketplace" },
+      "input": { "item_price": "150.00", "shipping_cost": "10.00", "currency": "EUR", "sender": "marketplace" },
       "expected": {
         "item_value_eur": "150.00",
         "shipping_eur": "10.00",
@@ -299,7 +300,7 @@ All 10 test cases below use a deterministic reference NBU rate fixture so unit t
     },
     {
       "id": "TC-P3",
-      "input": { "item_price": "200.00", "shipping_cost": "20.00", "currency": "EUR", "category": "electronics", "sender": "marketplace" },
+      "input": { "item_price": "200.00", "shipping_cost": "20.00", "currency": "EUR", "sender": "marketplace" },
       "expected": {
         "item_value_eur": "200.00",
         "shipping_eur": "20.00",
@@ -309,7 +310,7 @@ All 10 test cases below use a deterministic reference NBU rate fixture so unit t
     },
     {
       "id": "TC-P4",
-      "input": { "item_price": "300.00", "shipping_cost": "25.00", "currency": "USD", "category": "clothing", "sender": "marketplace" },
+      "input": { "item_price": "300.00", "shipping_cost": "25.00", "currency": "USD", "sender": "marketplace" },
       "expected": {
         "item_value_eur": "276.00",
         "shipping_eur": "23.00",
@@ -319,7 +320,7 @@ All 10 test cases below use a deterministic reference NBU rate fixture so unit t
     },
     {
       "id": "TC-P5",
-      "input": { "item_price": "1000.00", "shipping_cost": "40.00", "currency": "EUR", "category": "electronics", "sender": "marketplace" },
+      "input": { "item_price": "1000.00", "shipping_cost": "40.00", "currency": "EUR", "sender": "marketplace" },
       "expected": {
         "item_value_eur": "1000.00",
         "shipping_eur": "40.00",

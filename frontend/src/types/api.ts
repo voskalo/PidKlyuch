@@ -1,5 +1,4 @@
 export type DeliveryType = 'parcel' | 'car';
-export type ParcelCategory = 'electronics' | 'clothing' | 'cosmetics' | 'toys' | 'other';
 export type Currency = 'EUR' | 'USD' | 'UAH' | 'GBP' | 'PLN';
 export type RulesMode = 'current' | 'july_2027';
 export type ParcelSender = 'marketplace' | 'private';
@@ -9,7 +8,6 @@ export type CarOrigin = 'eu' | 'other';
 
 export interface ParcelCalculateRequest {
   delivery_type: 'parcel';
-  category: ParcelCategory;
   item_price: number;
   shipping_price?: number;
   currency?: Currency;

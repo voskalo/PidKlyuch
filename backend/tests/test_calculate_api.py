@@ -1,4 +1,4 @@
-PARCEL = {"delivery_type": "parcel", "category": "electronics", "item_price": 200,
+PARCEL = {"delivery_type": "parcel", "item_price": 200,
           "shipping_price": 15, "currency": "EUR"}
 CAR = {"delivery_type": "car", "car_price": 10000, "shipping_price": 0, "currency": "EUR",
        "engine_type": "petrol", "engine_volume_cc": 2000, "manufacture_year": 2014, "origin": "other"}
@@ -68,3 +68,12 @@ def test_response_says_which_rates_were_used(client):
     b = client.post("/api/calculate", json=PARCEL).json()
     assert b["rates_verified_at"] == "2026-11-18"
     assert b["rates_version"]
+
+
+def test_old_clients_category_is_accepted_and_ignored(client):
+    # The goods category was removed on 18.11 (customs rules don't depend on it); old payloads must still work.
+    plain = client.post("/api/calculate", json=PARCEL).json()
+    for category in ("electronics", "clothing", "anything"):
+        r = client.post("/api/calculate", json={**PARCEL, "category": category})
+        assert r.status_code == 200
+        assert r.json()["lines"] == plain["lines"] and r.json()["taxes_total_eur"] == "16.00"

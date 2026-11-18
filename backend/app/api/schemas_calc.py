@@ -10,8 +10,9 @@ Amount = Annotated[Decimal, Field(ge=0, le=10_000_000, max_digits=12, decimal_pl
 
 
 class ParcelIn(BaseModel):
+    # No goods category: Customs Code 374 p.7 taxes all non-excise goods in a parcel the same way.
+    # A "category" sent by old clients is ignored (pydantic drops unknown fields).
     delivery_type: Literal["parcel"]
-    category: Literal["electronics", "clothing", "cosmetics", "toys", "other"] = "other"
     item_price: Amount
     shipping_price: Amount = Decimal("0")
     currency: Currency = "EUR"

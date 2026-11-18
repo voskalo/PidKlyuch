@@ -41,7 +41,7 @@ and the report PDF.
 ### 👤 Anna Kravchenko: Frontend & UX  (`frontend/`)
 - Set up the frontend project and layout (mobile-friendly, since most users come from Telegram or TikTok on phones).
 - Sign-up and sign-in pages, plus "logged in / logged out" UI states.
-- **Smart input flow:** choose the delivery type (parcel / car), then the category, then short dynamic questions.
+- **Smart input flow:** choose the delivery type (parcel / car), then answer a few short questions. Parcels need no goods category: the law taxes all non-excise goods in a parcel the same way.
 - **Result page:** itemized breakdown (duty, VAT, excise, total), the formula for each line, and the
   **"today vs. July 2027"** comparison for parcels.
 - **History page** for signed-in users.
