@@ -128,7 +128,7 @@ cp .env.example .env            # defaults work locally (SQLite file pidklyuch.d
 
 - API health: `http://localhost:8000/api/health`
 - Interactive Swagger docs: `http://localhost:8000/docs`
-- Unit tests (`250` tests): `cd backend && .venv/bin/pytest`
+- Unit tests (`257` tests): `cd backend && .venv/bin/pytest`
 - Law watcher check: `cd backend && .venv/bin/python scripts/check_law_updates.py`
 - With Docker instead: `docker build -t pidklyuch-backend backend && docker run -p 8000:8000 pidklyuch-backend`
 
@@ -231,8 +231,8 @@ After the first manual setup above, deploys are automatic:
 git push origin main:deploy     # release what is on main
 ```
 
-Every push to the `deploy` branch runs [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml): backend tests and
-the frontend build, then (only if both pass) it connects to the EC2 server over SSH, fast-forwards the server's
+Every push to the `deploy` branch runs [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml): backend tests,
+the frontend build and a Caddyfile smoke test (`infra/test_caddy_config.sh`), then (only if both pass) it connects to the EC2 server over SSH, fast-forwards the server's
 checkout to `deploy`, runs `docker compose up -d --build`, and checks that the HTTPS site answers. Progress is in the
 repo's **Actions** tab. Every other push and pull request runs only the tests and build.
 

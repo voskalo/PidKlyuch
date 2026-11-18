@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { X, Users, Calculator, UserCheck, BarChart3, RefreshCw } from 'lucide-react';
+import { ModalShell } from './ModalShell';
 import type { StatsResponse } from '../types/api';
 import { api } from '../services/api';
 
@@ -35,17 +36,17 @@ export const StatsModal: React.FC<StatsModalProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain border border-slate-100">
+    <ModalShell onClose={onClose} labelledBy="stats-modal-title" panelClassName="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain border border-slate-100">
         <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-slate-50/70">
           <div className="flex items-center gap-2">
             <BarChart3 className="w-5 h-5 text-blue-600" />
-            <h3 className="font-bold text-slate-900 text-base">
+            <h3 id="stats-modal-title" className="font-bold text-slate-900 text-base">
               Метрики використання проєкту
             </h3>
           </div>
           <button
             onClick={onClose}
+            aria-label="Закрити"
             className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-200/50 transition-colors"
           >
             <X className="w-5 h-5" />
@@ -139,7 +140,6 @@ export const StatsModal: React.FC<StatsModalProps> = ({ isOpen, onClose }) => {
             Закрити
           </button>
         </div>
-      </div>
-    </div>
+      </ModalShell>
   );
 };

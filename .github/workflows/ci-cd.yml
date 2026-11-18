@@ -1,5 +1,5 @@
 # CI/CD for PidKlyuch
-#  - Every push / pull request: backend tests + frontend build.
+#  - Every push / pull request: backend tests + frontend build + Caddyfile smoke test.
 #  - Push to the `deploy` branch: same checks, then deploy to the AWS EC2 server over SSH
 #    (git fast-forward + docker compose up --build) and verify the live site.
 #
@@ -54,9 +54,16 @@ jobs:
       - run: npm ci
       - run: npm run build
 
+  infra-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate and smoke-test infra/Caddyfile (security + cache headers)
+        run: bash infra/test_caddy_config.sh
+
   deploy:
     if: github.event_name == 'push' && github.ref == 'refs/heads/deploy'
-    needs: [backend-tests, frontend-build]
+    needs: [backend-tests, frontend-build, infra-config]
     runs-on: ubuntu-latest
     timeout-minutes: 25
     concurrency:

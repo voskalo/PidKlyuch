@@ -1,5 +1,6 @@
 import React from 'react';
 import { X, Heart, ExternalLink, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { ModalShell } from './ModalShell';
 
 interface DonationModalProps {
   isOpen: boolean;
@@ -10,12 +11,12 @@ export const DonationModal: React.FC<DonationModalProps> = ({ isOpen, onClose })
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-100 flex flex-col max-h-[90vh]">
+    <ModalShell onClose={onClose} labelledBy="donation-modal-title" panelClassName="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-100 flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-amber-500 p-6 text-white relative">
           <button
             onClick={onClose}
+            aria-label="Закрити"
             className="absolute top-4 right-4 text-white/80 hover:text-white hover:bg-white/10 rounded-full p-1.5 transition-colors"
           >
             <X className="w-5 h-5" />
@@ -24,7 +25,7 @@ export const DonationModal: React.FC<DonationModalProps> = ({ isOpen, onClose })
             <Heart className="w-3.5 h-3.5 fill-current text-rose-300" />
             Підтримай перемогу
           </div>
-          <h3 className="text-xl font-bold leading-tight">
+          <h3 id="donation-modal-title" className="text-xl font-bold leading-tight">
             Підтримай Збройні Сили України
           </h3>
           <p className="text-sm text-blue-50 mt-1">
@@ -137,7 +138,6 @@ export const DonationModal: React.FC<DonationModalProps> = ({ isOpen, onClose })
             Закрити
           </button>
         </div>
-      </div>
-    </div>
+      </ModalShell>
   );
 };

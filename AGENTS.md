@@ -143,14 +143,14 @@ Update the Status column above when a criterion is met.
 | Backend language/framework | **Python 3.12+ / FastAPI** | `backend/`, entry point `app.main:app` (uvicorn on `$PORT`, default `8000`, `--proxy-headers`) |
 | ORM / Database | **SQLAlchemy 2.0**: SQLite locally, **PostgreSQL 16** in prod | Set via `DATABASE_URL` (`postgres:16-alpine` in Compose or AWS RDS Postgres); tables auto-created on startup via `init_db()` |
 | Auth method | **JWT bearer tokens** (PyJWT, HS256) + optional **Google Sign-In** (GIS ID tokens) | Passwords hashed with stdlib PBKDF2-SHA256 (`390,000` iterations); Google ID tokens verified via `google-auth` (`POST /api/auth/google`) |
-| Tests | **pytest** + FastAPI `TestClient` | `cd backend && .venv/bin/pytest` (250 tests passing) |
+| Tests | **pytest** + FastAPI `TestClient` | `cd backend && .venv/bin/pytest` (257 tests passing) |
 | Frontend framework | **React 19 / TypeScript / Vite 8 / Tailwind CSS v4** | `frontend/`, Lucide Icons, dev proxy `/api` → `127.0.0.1:8000`; built with Node 22 and served on `:80` behind Caddy in prod |
 | Hosting (backend & frontend) | **AWS EC2 (Ubuntu 24.04)** + **Docker Compose + Caddy v2** (automatic HTTPS) | Single HTTPS origin via `<EC2-IP>.sslip.io` (Let's Encrypt TLS); `/api/*` → `backend:8000`, `/*` → `frontend:80` |
 | Database (prod) | **PostgreSQL 16** (Docker Compose `db` or **AWS RDS for PostgreSQL**) | Set via `DATABASE_URL` (`?sslmode=require` if using RDS; never SQLite in prod) |
 | Secrets | `.env` locally / AWS Secrets Manager or SSM on EC2 | `JWT_SECRET`, `POSTGRES_PASSWORD` never committed to git |
 | Logs | Docker Compose stdout / **CloudWatch Logs** | Uvicorn + Python `logging` + Caddy access logs |
 | Infra as code | `infra/` (Docker Compose, multi-stage Dockerfiles, Caddyfile) | Includes `--profile fallback` (`hello:80`) and full-stack setup |
-| CI / CD | **GitHub Actions** `.github/workflows/ci-cd.yml` | every push/PR: `pytest` + `npm run build`; push to `deploy` → SSH deploy to EC2 + HTTPS health check (see §9) |
+| CI / CD | **GitHub Actions** `.github/workflows/ci-cd.yml` | every push/PR: `pytest` + `npm run build` + `infra/test_caddy_config.sh` (Caddyfile valid, security/cache headers, no `Server` header); push to `deploy` → SSH deploy to EC2 + HTTPS health check (see §9) |
 | Automation | `backend/scripts/check_law_updates.py` | Weekly law-watcher cron verifying `zakon.rada.gov.ua` fingerprints against `tax_rates.json` |
 
 **AWS implications for the backend (already handled or to keep in mind):**
@@ -179,12 +179,14 @@ PidKlyuch/
 │   ├── scripts/check_law_updates.py  # law watcher: compares zakon.rada.gov.ua fingerprints with tax_rates.json
 │   ├── app/
 │   │   ├── main.py            # create_app(): CORS, routers, DB init on startup
-│   │   ├── core/              # config.py (Settings), database.py (init_db, normalize_db_url), security.py (PBKDF2 + JWT)
+│   │   ├── core/              # config.py (Settings), database.py (init_db, normalize_db_url), security.py (PBKDF2 + JWT),
+│   │   │                      #   rate_limit.py (LoginRateLimiter: failed sign-ins per account / IP, in memory)
 │   │   ├── api/               # health.py, auth.py, calculate.py, history.py, deps.py, schemas_{auth,calc}.py
 │   │   ├── models/            # SQLAlchemy ORM models: user.py (User), calculation.py (Calculation)
 │   │   ├── services/          # auth_service.py, rates_service.py, calculation_service.py, history_service.py
 │   │   └── customs/           # pure Python engine: tax_rates.json, rules.py, models.py, calculators.py
-│   └── tests/                 # pytest (250 tests). Run: cd backend && .venv/bin/pytest
+│   └── tests/                 # pytest (257 tests). Run: cd backend && .venv/bin/pytest
+│                              #   test_rate_limit.py = sign-in brute-force protection (429 after 5 failures/account, 20/IP)
 │                              #   test_origin.py = country of origin × country of dispatch for cars, bans, agreement dates
 │                              #   test_excise.py = excise goods in luggage, hand-checked cases + API validation
 │                              #   test_edge_cases.py = hostile/boundary input (bad tokens, NaN, decimals, thresholds
@@ -208,14 +210,17 @@ PidKlyuch/
 │       ├── utils/amount.ts    # parseAmount(): price input check mirroring the API limits (0…10 000 000, cents)
 │       ├── context/AuthContext.tsx # React AuthProvider (user state, login/signup/logout, token storage)
 │       ├── constants/excise.ts # icons, short labels, demo defaults for the 11 excise kinds (presentation only)
-│       └── components/        # Navbar, RatesBar, ParcelForm, CarForm, ExciseForm, BreakdownView, CompareRulesModal, HistoryView, AuthModal, DonationModal, StatsModal, Footer
+│       └── components/        # Navbar, RatesBar, ParcelForm, CarForm, ExciseForm, BreakdownView, CompareRulesModal, HistoryView, AuthModal, DonationModal, StatsModal, Footer,
+│                                  #   ModalShell (shared dialog: Escape/backdrop close, focus trap + restore, scroll lock, role=dialog)
 ├── .github/workflows/ci-cd.yml # CI on every push/PR (backend pytest + frontend build); push to `deploy` → auto-deploy to EC2
 ├── infra/                     # Docker, deployment configs, Caddy HTTPS proxy (owner: Anton)
 │   ├── deploy_key.pub         # PUBLIC half of the GitHub Actions deploy key (goes into the server's authorized_keys)
 │   ├── hello-world/index.html # Fallback static status/landing page for HTTPS smoke test
 │   ├── .env.example           # Full-stack Compose, DB, Caddy, backend & frontend env var template
 │   ├── .gitignore             # Ignores infra/.env and *.env.local
-│   ├── Caddyfile              # Caddy v2 reverse proxy (/healthz, /api/docs*, /api/* -> backend, /* -> frontend)
+│   ├── Caddyfile              # Caddy v2 reverse proxy (/healthz, /api/docs*, /api/* -> backend, /* -> frontend); security headers,
+│   │                          #   no Server header, Cache-Control (hashed /assets/* 1 year immutable, UI pages no-cache)
+│   ├── test_caddy_config.sh   # CI smoke test of the Caddyfile with Docker (validate + header checks against stand-in upstreams)
 │   ├── Dockerfile             # Lightweight caddy:2-alpine static server image for fallback hello-world
 │   ├── backend.Dockerfile     # Production Python 3.12 FastAPI container with /api/health HEALTHCHECK
 │   ├── frontend.Dockerfile    # Multi-stage Node 22 Vite build + Caddy static SPA server
@@ -255,6 +260,7 @@ Format: `NAME`: where it is used, example value (never a real secret), required 
 - `PASSWORD_HASH_ITERATIONS`: backend, PBKDF2 iterations, default `390000` (lowered only in tests). Optional.
 - `TAX_RATES_PATH`: backend, optional override path for `tax_rates.json` (default `app/customs/tax_rates.json`). Optional.
 - `GOOGLE_CLIENT_ID`: backend, Google OAuth 2.0 Web Client ID used as expected `audience` when verifying ID tokens in `POST /api/auth/google`. Optional (defaults to `""`).
+- `LOGIN_MAX_FAILURES_PER_ACCOUNT` (default `5`), `LOGIN_MAX_FAILURES_PER_IP` (default `20`), `LOGIN_WINDOW_SECONDS` (default `900`): backend, sign-in brute-force protection (`app/core/rate_limit.py`). Optional.
 
 ### GitHub Actions secrets (repo Settings → Secrets → Actions; used by `.github/workflows/ci-cd.yml`)
 - `EC2_HOST` (`16.170.212.120`), `EC2_USER` (`ubuntu`): the SSH target. **Set 18.11.** Update `EC2_HOST` if the server IP changes.
@@ -312,6 +318,9 @@ exactly (case-sensitive, no trimming); otherwise `422` with `detail[].loc[-1] ==
 (too short/long), only the `password` error is reported. Sign-in does NOT take `password_confirm`.
 
 **POST /api/auth/signin**: body `{"email", "password"}` → `200`, same shape as signup. `401` on wrong credentials.
+**`429` (since 18.11)** `{"detail": "Too many sign-in attempts, try again later"}` + `Retry-After: <seconds>` after 5 failed
+attempts for one email (case-insensitive) or 20 from one IP within 15 minutes; while locked even the right password gets
+429. A successful sign-in clears that email's counter. The UI shows "Забагато невдалих спроб входу…".
 
 **POST /api/auth/google**: body `{"credential": "<google_id_token>"}` → `200`, same `TokenOut` shape as signin/signup; links existing user by email (`google_sub`) or auto-registers an OAuth user (`auth_provider="google"`). `401` on invalid/unverified token.
 
@@ -456,6 +465,13 @@ Format: `YYYY-MM-DD: decision: reason (who)`
   to cents instead of failing, and `services/api.ts` translates every backend error to Ukrainian. Reason: users saw
   English pydantic texts ("Decimal input should have no more than 2 decimal places", "Email already registered").
   (Liubomyr + Claude Code)
+- 2026-11-18: **Sign-in rate limit in memory** (`LoginRateLimiter`, per email and per client IP, sliding 15-min window)
+  instead of Redis/a DB table. Reason: one uvicorn process on one EC2 server; no new service the day before the demo.
+  The client IP comes from Caddy's `X-Forwarded-For` via uvicorn `--proxy-headers` (Caddy does not trust a client-sent
+  XFF by default, so it cannot be spoofed). (Liubomyr + Claude Code)
+- 2026-11-18: **Security and cache headers live in the Caddyfile**, tested in CI (`infra/test_caddy_config.sh`, deploy
+  depends on it). Only `frame-ancestors` in CSP — a full CSP would need allow-lists for Google Sign-In and Swagger UI.
+  (Liubomyr + Claude Code, Anton's area)
 ---
 
 ## 11. Open issues / TODO
@@ -909,6 +925,41 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **Deployed 18.11 (late night):** PR #10 merged (`6370012`), deploy run 44359901645 green. Verified live: `/api/car/origins`
   lists 8 origins with rates; russia dispatch → 422; UAE car → 6.7% (€750.40); the origin/dispatch UI is in the bundle.
   One more anonymous test calculation saved (4 test calculations from me today in total: subtract them in the report).
+
+
+### 2026-11-18 (late evening): Small bug fixes from the QA pass (accessibility, brute force, headers)
+- **Who:** Liubomyr Voskalo via Claude Code (Opus 5.5)
+- **Area:** frontend + backend + infra (cross-area: Anna's modals/forms, Anton's `infra/Caddyfile` and CI)
+- **What was done:** fixed the 7 bugs found by the QA pass of 18.11:
+  1. Modals did not close on Escape or a backdrop click → new `frontend/src/components/ModalShell.tsx` used by
+     `AuthModal`, `StatsModal`, `DonationModal`, `CompareRulesModal` (Escape; backdrop click only if press and release
+     are both on the backdrop; scroll lock).
+  2. Focus stayed behind open modals → `ModalShell` focuses the first field (`data-autofocus`: email in the sign-in
+     modal), traps Tab/Shift+Tab inside, restores focus to the opener; `role="dialog"`, `aria-modal`, `aria-labelledby`
+     (title ids `auth-/stats-/donation-/compare-modal-title`); ✕ buttons got `aria-label="Закрити"`.
+  3. Parcel/car/auth fields had no accessible name → labels linked with `htmlFor`/`id` (`parcel-price`,
+     `parcel-shipping`, `car-price`, `car-shipping`, `car-battery`, `car-engine-volume`, `car-year`, `auth-name`,
+     `auth-email`, `auth-password`, `auth-password-confirm`).
+  4. No security headers → `infra/Caddyfile`: HSTS (1 year), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+     `Content-Security-Policy: frame-ancestors 'none'`, `Referrer-Policy`, `Permissions-Policy`.
+  5. Unlimited wrong passwords → `backend/app/core/rate_limit.py` + `POST /api/auth/signin` → 429 with `Retry-After`
+     (5 failures per email / 20 per IP in 15 min; settings `LOGIN_*`), Ukrainian message in `services/api.ts`.
+  6. No caching of static files → `Cache-Control: public, max-age=31536000, immutable` for hashed `/assets/*`,
+     `no-cache` for UI pages (so deploys show up at once); API responses untouched.
+  7. Server names visible → `header -Server` in Caddy (removes Caddy's and uvicorn's), uvicorn `--no-server-header`
+     in `infra/backend.Dockerfile` and `backend/Dockerfile`.
+  - New CI job `infra-config` runs `infra/test_caddy_config.sh` (Docker: validate, then real requests through Caddy to
+    stand-in upstreams checking headers, Server removal and cache rules); `deploy` now needs it.
+- **Files touched:** `frontend/src/components/{ModalShell.tsx (new),AuthModal.tsx,StatsModal.tsx,DonationModal.tsx,
+  CompareRulesModal.tsx,ParcelForm.tsx,CarForm.tsx}`, `frontend/src/services/api.ts`, `backend/app/core/{rate_limit.py (new),
+  config.py}`, `backend/app/api/auth.py`, `backend/tests/{test_rate_limit.py (new),conftest.py}`, `backend/.env.example`,
+  `backend/Dockerfile`, `infra/{Caddyfile,backend.Dockerfile,test_caddy_config.sh (new)}`, `.github/workflows/ci-cd.yml`,
+  `README.md`, `AGENTS.md` (§5, §6, §7, §8, §10, §12).
+- **Decisions & why:** see §10 (in-memory limiter; headers in Caddy tested by CI).
+- **How to verify / run:** `cd backend && .venv/bin/pytest` (257 passed); `bash infra/test_caddy_config.sh` (needs Docker;
+  runs in CI); scratch Playwright: exploratory QA 27/27, UI suite 82/82, mobile audit clean; live:
+  `curl -sI https://16.170.212.120.sslip.io/` shows the headers and no `server:`.
+- **Not done / known problems / next steps:** the limiter is per process (fine for one uvicorn worker).
 
 ---
 
