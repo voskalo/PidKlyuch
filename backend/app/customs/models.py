@@ -31,7 +31,6 @@ class Sender(str, Enum):
 class ParcelInput:
     goods_value_eur: Decimal
     shipping_eur: Decimal
-    category: str = "other"
     sender: Sender = Sender.MARKETPLACE
 
 

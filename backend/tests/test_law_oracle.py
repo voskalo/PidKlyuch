@@ -91,8 +91,7 @@ def gen_parcel(r):
     price = rnd_amount(r, PARCEL_EDGES)
     if cur == "UAH" and r.random() < 0.5:  # amounts close to the threshold after conversion
         price = f"{c(D(r.choice(['45', '150'])) * UAH['EUR'] + D(r.randint(-3, 3)) / 100):.2f}"
-    body = {"delivery_type": "parcel", "item_price": price, "currency": cur,
-            "category": r.choice(["electronics", "clothing", "cosmetics", "toys", "other"])}
+    body = {"delivery_type": "parcel", "item_price": price, "currency": cur}
     if r.random() < 0.8:
         body["shipping_price"] = rnd_amount(r, ["0", "5", "15", "20.5"])
     if r.random() < 0.8:

@@ -23,7 +23,6 @@ class CalculationService:
             data = ParcelInput(
                 goods_value_eur=self._eur(body.item_price, body.currency),
                 shipping_eur=self._eur(body.shipping_price, body.currency),
-                category=body.category,
                 sender=Sender(body.sender),
             )
             return ParcelCalculator(PARCEL_RULES[body.rules]).calculate(data)
