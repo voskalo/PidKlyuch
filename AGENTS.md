@@ -422,9 +422,7 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - [x] Fill in "How to run" and "How to deploy" in `README.md` (Anton + Liubomyr + Anna).
 - [x] Create user-testing script, Google Form questions, master tracker (`docs/user-testing-plan.md`), and Ukrainian recruiting templates (`docs/recruiting-messages.md`) (Anton).
 - [x] Merge `anton/infra-and-docs` (PR #3) into `main` (merged 17.11).
-- [ ] **Finish the auto-deploy setup (Anton): run runbook §14.1.** Status on 18.11 09:30: PR #5 merged, `deploy`
-  branch created, secrets set, tests green; the deploy job fails only with `Permission denied (publickey)` because the
-  deploy key is not on the server yet. Finishing it also ships the 18.11 backend bug fixes to the live site.
+- [x] **ONE-TIME, to enable auto-deploy (Anton, ~1 min):** appended `infra/deploy_key.pub` to `ubuntu@16.170.212.120:~/.ssh/authorized_keys` and fast-forwarded `origin/deploy` from `main` (18.11).
 - [ ] Schedule `cd backend && python scripts/check_law_updates.py` weekly and alert team on non-zero exit (Anton).
 - [ ] Run Wednesday user-testing sessions (15+ external testers, collect quotes, UX fixes, and donation screenshots) and write `docs/report.pdf` (all, Wed 18 – Thu 19 Nov).
 - [ ] Re-check by hand when the Cabinet sets the start date of the July 2027 parcel VAT (source `law_5025_ix`) (Liubomyr).
@@ -590,6 +588,15 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **How to verify / run:** `docker compose --env-file infra/.env.example -f infra/docker-compose.yml config`
 - **Not done / known problems / next steps:** Step 4 (live AWS EC2 deploy and HTTPS verification).
 
+### 2026-11-18 11:29: Deploy Google Sign-In update to AWS EC2 (`https://16.170.212.120.sslip.io`)
+- **Who:** Anton Vertyporoh via Antigravity CLI
+- **Area:** infra / docs
+- **What was done:** Connected via SSH to `ubuntu@16.170.212.120`, switched `/home/ubuntu/PidKlyuch` to `main` and fast-forwarded to `origin/main` (`221012c`), appended `infra/deploy_key.pub` to `~/.ssh/authorized_keys`, added `GOOGLE_CLIENT_ID` and `VITE_GOOGLE_CLIENT_ID` (`173388861976-tejqvtfmt2emurajvrim2i6huq75rnd5.apps.googleusercontent.com`) to `/home/ubuntu/PidKlyuch/infra/.env`, and rebuilt/restarted Compose containers (`docker compose --env-file .env up -d --build`). Verified all containers up/healthy and all HTTPS endpoints live.
+- **Files touched:** `AGENTS.md` (§11, §12)
+- **Decisions & why:** none
+- **How to verify / run:** `curl -fsSL https://16.170.212.120.sslip.io/openapi.json | grep -o '"/api/auth/google"'` (`"/api/auth/google"`), `curl -s -o /dev/null -w "%{http_code}" https://16.170.212.120.sslip.io/api/docs` (`200`), `curl -s -o /dev/null -w "%{http_code}" https://16.170.212.120.sslip.io/` (`200`), `POST /api/auth/google` with invalid token (`401 {"detail":"Invalid Google token"}`), and live JS bundle contains `VITE_GOOGLE_CLIENT_ID`.
+- **Not done / known problems / next steps:** None for Google Sign-In deploy; test interactively with a real Google account in browser (ensure `https://16.170.212.120.sslip.io` is in Authorized JavaScript origins in Google Cloud Console).
+
 ### 2026-11-18: Runbook §14.1 for finishing auto-deploy (for Anton's agent)
 - **Who:** Liubomyr Voskalo via Claude Code (Opus 5.5)
 - **Area:** docs / infra
@@ -602,7 +609,11 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **Decisions & why:** the instructions live in AGENTS.md (not a PDF or chat message) so Anton's agent finds and
   executes them itself, checking what is already done first.
 - **How to verify / run:** ask any agent: "run runbook §14.1".
-- **Not done / known problems / next steps:** C5 (deploy key on the server) → C7 → C8, by Anton or his agent.
+- **Not done / known problems / next steps:** none. Anton installed the deploy key in parallel (11:29), and the first
+  automatic deploy (run 44276538099, commit `5b6c631`) succeeded. Verified live with runbook check C8: `/api/health`
+  is OK, a bad car input gets a 422 about `engine_volume_cc` (new backend), an invalid token on `/api/calculate` gets
+  401, `/api/auth/google` exists, and `/` returns 200. Runbook §14.1 marked DONE; it stays as the reference for an
+  IP change or a broken deploy.
 
 ---
 
@@ -630,7 +641,7 @@ A runbook is written so that **any agent can execute it**: it checks the real st
 itself, and stops to ask its human only where marked **ASK** (a decision) or **HUMAN** (something only a person can
 do: a password, a console click, admin rights). Every step is idempotent: re-running a finished step changes nothing.
 
-### 14.1 Finish GitHub Actions auto-deploy to EC2 — owner: Anton — status: OPEN
+### 14.1 Finish GitHub Actions auto-deploy to EC2 — owner: Anton — status: DONE (18.11, deploy run 44276538099, `5b6c631`)
 
 **Goal:** a push to the `deploy` branch automatically deploys to https://16.170.212.120.sslip.io (see §9 and
 `.github/workflows/ci-cd.yml`). **Done when** the latest `CI/CD` run on `deploy` is green and the live API runs the
@@ -702,7 +713,7 @@ Fixes:
 - Neither `DOCKER_OK` nor `SUDO_OK` → **ASK** Anton, then `$SSH 'sudo usermod -aG docker ubuntu'` (requires sudo with
   a password: **HUMAN**).
 
-**C5. Deploy key is installed on the server** — status 18.11: ❌ (this is the blocker)
+**C5. Deploy key is installed on the server** — status 18.11: ✅ (installed by Anton 11:29)
 ```bash
 $SSH 'grep -c "github-actions-deploy@PidKlyuch" ~/.ssh/authorized_keys'      # must print 1
 ```
