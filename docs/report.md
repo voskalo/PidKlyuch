@@ -1,157 +1,148 @@
-# Фінальний звіт проєкту PidKlyuch («Під ключ»)
+# PidKlyuch («Під ключ») — Final Project Report
 
-**Курс:** Об'єктно-орієнтований аналіз та проєктування (ООАП / OOAD), 2 курс  
-**Дата звіту:** 18 листопада 2026 р. (демо: 19 листопада 2026 р.)  
-**Команда:** Любомир Воскало (`backend/`, митні правила, API, CI/CD), Анна Кравченко (`frontend/`, UI/UX), Антон Вертипорох (`infra/`, AWS EC2 + HTTPS, `docs/`, координація тестування та звіт)  
-**Живий HTTPS-прототип:** https://16.170.212.120.sslip.io (Swagger UI: https://16.170.212.120.sslip.io/api/docs)  
-**Репозиторій GitHub:** https://github.com/voskalo/PidKlyuch
-
----
-
-## 1. Стислий огляд проєкту (Executive Summary)
-
-**PidKlyuch («Під ключ»)** — це веб-калькулятор повної кінцевої вартості товарів, що імпортуються в Україну з-за кордону: від міжнародних поштових і експрес-посилок до ввезення легкових автомобілів та підакцизних товарів у багажі. Сервіс вирішує практичну проблему непередбачуваності митних платежів: замість складних нормативних таблиць користувач за хвилину отримує точний розрахунок **мита, акцизу та ПДВ** у євро й гривнях за актуальним офіційним курсом НБУ, із прозорою покроковою формулою для кожного платежу.
-
-Ключові можливості реалізованого MVP:
-
-- **Посилки з-за кордону:** розрахунок за чинними правилами (безмитний поріг **€150**, 10% мито та 20% ПДВ лише на суму перевищення; €200 посилка → €16.00 податків) і порівняння **«Сьогодні vs Липень 2027»** за ухваленими Законами № 5025-IX та № 5026-IX (20% ПДВ від першого євро для маркетплейсів, звільнення приватних некомерційних подарунків до €45, оподаткування повної вартості при перевищенні €150).
-- **Автомобілі:** розрахунок мита за **країною походження та країною відправлення** (преференції ЄС, EFTA, Великої Британії, Канади, Ізраїлю, ОАЕ, перевірка прямого транспортування, ставка 5% для нових бензинових/гібридних авто > 3000 см³, заборона імпорту з рф), акцизу (`база × об'єм × K_age`, де `K_age = 1` для нових авто, €1/кВт·год для електромобілів) та 20% ПДВ.
-- **Підакцизні товари в багажі:** 11 категорій (алкоголь, тютюн, рідини для е-сигарет, пальне) з урахуванням безмитних норм МКУ ст. 376 та правила 24 годин.
-- **Акаунти та історія:** реєстрація/вхід через email+пароль (JWT) та **Google Sign-In (`POST /api/auth/google`)**, збереження історії розрахунків, публічна статистика `/api/stats` і модаль волонтерського донату.
-
-За підсумками тестування на **15 реальних зовнішніх користувачах (`T-01`–`T-15`)** 86.7% виконали сценарії повністю або частково без втручання модератора, середня оцінка зрозумілості склала **4.07 / 5.0** (**4.54 / 5.0** поза 3-хвилинним вікном оновлення контейнерів), а **93.3% (14/15)** вже задонатили або готові донатити 20–100 грн при реальному замовленні.
+**Course:** Object-Oriented Analysis and Design (OOAD), 2nd Year  
+**Report Date:** 18 November 2026 (Live Demo: 19 November 2026)  
+**Team:** Liubomyr Voskalo (`backend/`, customs rules, API, CI/CD), Anna Kravchenko (`frontend/`, UI/UX), Anton Vertyporoh (`infra/`, AWS EC2 + HTTPS, `docs/`, user testing coordination & report)  
+**Live HTTPS Prototype:** https://16.170.212.120.sslip.io (API Swagger UI: https://16.170.212.120.sslip.io/api/docs)  
+**GitHub Repository:** https://github.com/voskalo/PidKlyuch
 
 ---
 
-## 2. Архітектура та ООП-проєктування
+## 1. Executive Summary
 
-Система побудована як модульний тришаровий стек із чітким розділенням відповідальності між доменною логікою, веб-сервісом та клієнтським інтерфейсом.
+**PidKlyuch («Під ключ»)** is a web calculator for the full landed cost of goods imported into Ukraine from abroad — from international postal/express parcels to passenger cars and excisable goods in personal luggage. Ukrainian import taxation depends on thresholds, origin rules, age coefficients, and upcoming 2027 legislation, making the final price difficult for buyers to predict. PidKlyuch solves this by calculating **import duty, excise, and VAT** in under a minute using live daily National Bank of Ukraine (NBU) exchange rates and displaying an itemized breakdown with the exact legal formula behind every line.
 
-### 2.1 Доменне ООП-моделювання (`backend/app/customs/`)
+What is implemented and live in production (`origin/deploy` @ `13d7b04` on `https://16.170.212.120.sslip.io`):
 
-Уся митна математика зосереджена виключно на бекенді (жодної дубльованої логіки у фронтенді) та реалізована через патерн **Strategy**:
+- **Parcels:** Calculation under current rules (**€150** duty-free threshold, 10% duty + 20% VAT on the excess; a €200 parcel adds €16.00 in taxes) alongside a **Today vs. July 2027** comparison implementing enacted Laws № 5025-IX and № 5026-IX (20% VAT from the first euro on marketplace parcels, €45 exemption for non-commercial private gifts, and taxation on the full value above €150).
+- **Passenger Cars:** Duty computed by **country of origin × country of dispatch** (preferential 0% rates for EU, EFTA, UK, Canada, Israel, and 2/3-rate for UAE under direct-transport rules; 5% duty for new petrol/hybrid cars > 3,000 cm³; import bans for shipments from/through russia), excise (`base × engine_litres × K_age`, with `K_age = 1` for new cars and €1/kWh for EVs), and 20% VAT.
+- **Excisable Goods in Luggage:** 11 categories (beer, wine, sparkling wine, spirits, cigarettes, cigars, smoking tobacco, heated sticks, e-liquids, petrol, diesel) applying Customs Code Art. 376 duty-free allowances, the 24-hour rule, and 2026/2027 excise schedules.
+- **Accounts, History & Donations:** Email/password registration (JWT + confirmation + brute-force rate limiting), **Google Sign-In (`POST /api/auth/google`)**, persistent calculation history in PostgreSQL 16, live `/api/stats`, and a volunteer donation modal («Повернись живим», Serhiy Prytula Foundation, Monobank).
 
-- **Абстрактний базовий клас `CustomsCalculator(ABC)`** (`backend/app/customs/calculators.py`) визначає єдиний контракт `calculate(data) -> Breakdown`.
-- **Конкретні стратегії:**
-  1. `ParcelCalculator(rules: ParcelRules)` — інкапсулює розрахунок посилок; зміна законодавства («Сьогодні» vs «Липень 2027») реалізується підстановкою незмінного конфігураційного об'єкта `ParcelRules` без дублювання коду.
-  2. `CarCalculator(rules: CarRules)` — моделює мито за `Origin × ShippedFrom` (із винятком `ImportBanned` для відправлень із рф), обчислює коефіцієнт віку `K_age = clamp(current_year - manufacture_year - 1, 1, 15)` (або `1` для нових авто згідно з ПКУ 215.3.5-1) та виводить пояснювальні примітки.
-  3. `ExciseCalculator(rules: ExciseRules, eur_uah)` — обчислює норми безмитного ввезення в багажі, акциз у гривнях/євро, мито та ПДВ для 11 підакцизних видів товарів.
-- **Точність грошових обчислень:** усі грошові величини та ставки обчислюються через `decimal.Decimal` із округленням `ROUND_HALF_UP` на межі кожного податкового рядка (`TaxLine`), а в API передаються у вигляді рядків із 2 знаками після коми (`"16.00"`), що повністю усуває похибки двійкового `float` у JavaScript.
-- **Єдине джерело ставок і верифікація:** числові параметри зберігаються у `backend/app/customs/tax_rates.json`, контролюються скриптом моніторингу законодавства `backend/scripts/check_law_updates.py` (перевірка цифрових відбитків 25 нормативних положень на `zakon.rada.gov.ua`) та незалежним тестом-оракулом `backend/tests/test_law_oracle.py` (перевірка на 1000+ випадкових і граничних комбінацій). Загальна тестова база бекенду налічує **257 тестів `pytest`** (усі проходять).
-
-### 2.2 Сервіси, курси НБУ, БД та автентифікація
-
-- **Інтеграція з НБУ (`RatesService`):** завантажує щоденний офіційний JSON Національного банку України (`EUR`, `USD`, `UAH`, `GBP`, `PLN`) з годинним кешем у пам'яті та багаторівневим fallback (`last_good` → статичні резервні курси `rate_source: "fallback"`).
-- **База даних:** SQLAlchemy 2.0 (SQLite для локальної розробки, **PostgreSQL 16** у продакшені), моделі `User` та `Calculation` (зберігаються як авторизовані, так і анонімні розрахунки для аналітики `/api/stats`).
-- **Автентифікація та безпека:**
-  - Класична реєстрація/вхід (`POST /api/auth/signup`, `POST /api/auth/signin`) з хешуванням PBKDF2-SHA256 (`390,000` ітерацій), обов'язковим підтвердженням пароля `password_confirm`, видачею JWT Bearer-токенів (HS256) та захистом від перебору паролів (`LoginRateLimiter` у `backend/app/core/rate_limit.py`: `429 Too Many Requests` після 5 невдалих спроб на email або 20 на IP за 15 хв).
-  - **Google OAuth (`POST /api/auth/google`):** перевірка Google Identity Services ID-токена через `google.oauth2.id_token.verify_oauth2_token`, автоматична прив'язка `google_sub` до існуючого облікового запису за email або створення нового OAuth-користувача (`auth_provider="google"`, `password_hash="!oauth"`) з безпечною адитивною міграцією `init_db()` (`ALTER TABLE ... ADD COLUMN IF NOT EXISTS`).
-
-### 2.3 Frontend SPA та інфраструктура AWS
-
-- **Frontend (`frontend/`):** React 19 + TypeScript + Vite 8 + Tailwind CSS v4. Централізований `AuthContext`, обгортка `services/api.ts` (перекладає всі 401/422/429 помилки бекенду українською мовою), доступні модальні вікна через `ModalShell.tsx` (`Escape`, focus trap, блокування скролу), форми `ParcelForm`, `CarForm`, `ExciseForm`, візуалізація формул `BreakdownView`, порівняння `CompareRulesModal`, `HistoryView`, `DonationModal` і `StatsModal`.
-- **Інфраструктура (`infra/`):** розгорнуто на **AWS EC2 (`i-00ab50698f9435a50`, `t3.micro` + 2 GB swap, `eu-north-1`, Ubuntu 24.04)** через Docker Compose (`db`, `backend`, `frontend`, `caddy`). Reverse proxy **Caddy v2** надає автоматичний Let's Encrypt HTTPS для домену `16.170.212.120.sslip.io`, єдиний origin для фронтенду й `/api/*` (без CORS-затримок) та security-заголовки (`Strict-Transport-Security`, `X-Frame-Options: DENY`, `Content-Security-Policy: frame-ancestors 'none'`, видалення `Server`).
-- **CI/CD (`.github/workflows/ci-cd.yml`):** на кожен push/PR запускаються `backend-tests`, `frontend-build` та `infra-config` (`infra/test_caddy_config.sh`); при push у гілку `deploy` виконується автоматичний SSH-деплой на EC2 із перевіркою `/api/health`, `/` та заголовків безпеки.
+Across **15 external testers (`T-01`–`T-15`)**, **86.7%** completed the core tasks fully or partially without moderator intervention, the average clarity score was **4.07 / 5.0** (**4.54 / 5.0** excluding two responses during a 3-minute midday container rebuild), and **93.3% (14/15)** reported they had already donated or are willing to donate 20–100 UAH on a real order.
 
 ---
 
-## 3. Методологія юзер-тестування та вибірка (4 бали)
+## 2. Architecture & OOP Design
 
-### 3.1 Канали залучення та структура вибірки
+The system follows a clean three-tier architecture with strict separation between pure domain logic, application services, and presentation.
 
-Тестування проводилося **17–18 листопада 2026 р.** на живому HTTPS-прототипі (`https://16.170.212.120.sslip.io`). Відповідно до плану тестування (`docs/user-testing-plan.md` та `docs/recruiting-messages.md`), до участі залучалися реальні зовнішні респонденти (не близькі друзі команди) через:
+### 2.1 Domain OOP Modeling (`backend/app/customs/`)
 
-- тематичні Telegram-чати про закордонний шопінг (AliExpress, Amazon, iHerb, форвардери);
-- локальні авточати та спільноти з підбору/пригону авто з ЄС і США;
-- студентські канали та індивідуальні запрошення зі зворотним зв'язком у Google Form (`docs/feedback/responces.csv`).
+All tax logic resides exclusively in the backend so rules are never duplicated or out of sync in the UI. The engine is built around the **Strategy pattern**:
 
-Усього зібрано **N = 15 унікальних відповідей (`T-01`–`T-15`)**. Розподіл респондентів за досвідом імпорту:
+- **Abstract Base Class `CustomsCalculator(ABC)`** (`backend/app/customs/calculators.py`): defines a single polymorphic interface `calculate(data) -> Breakdown`.
+- **Concrete Strategies:**
+  1. `ParcelCalculator(rules: ParcelRules)`: encapsulates parcel taxation. Switching between current legislation and July 2027 rules injects a different immutable `ParcelRules` configuration object (`PARCEL_CURRENT` vs. `PARCEL_JULY_2027`) with zero branching duplication.
+  2. `CarCalculator(rules: CarRules)`: evaluates `Origin × ShippedFrom` preferential agreements (raising `ImportBanned` per Cabinet Resolution 426 for russia dispatch), computes `K_age = clamp(current_year − manufacture_year − 1, 1, 15)` (or `1` for new cars per Tax Code Art. 215.3.5-1), and attaches Ukrainian legal notes.
+  3. `ExciseCalculator(rules: ExciseRules, eur_uah)`: models 11 excisable goods in personal luggage, applying statutory allowances (zeroed under `< 24h` crossings) and converting UAH-denominated excise schedules at the live NBU EUR rate.
+- **Monetary Precision:** All internal calculations use `decimal.Decimal` with `ROUND_HALF_UP` at tax-line boundaries (`TaxLine`). API responses serialize monetary values as 2-decimal strings (`"16.00"`), eliminating IEEE-754 floating-point rounding issues in JavaScript.
+- **Single Source of Truth & Verification:** All statutory parameters live in `backend/app/customs/tax_rates.json`, monitored by `backend/scripts/check_law_updates.py` (which verifies 25 clause fingerprints against `zakon.rada.gov.ua`) and cross-checked by an independent law re-implementation oracle (`backend/tests/test_law_oracle.py`, 1,000+ seeded random and boundary inputs). The backend suite comprises **257 passing `pytest` tests**.
 
-- Замовляють посилки до €150 (AliExpress, Amazon, iHerb тощо): **9 осіб (60.0%)**;
-- Замовляють посилки дорожче €150: **3 особи (20.0%)**;
-- Приганяли або планують пригнати авто з-за кордону: **2 особи (13.3%)**;
-- Поки не замовляли, але цікавляться: **1 особа (6.7%)**.
+### 2.2 Services, Exchange Rates, Database & Authentication
 
-### 3.2 Два тестові сценарії
+- **NBU Live Rates (`RatesService`):** Fetches official daily NBU JSON (`EUR`, `USD`, `UAH`, `GBP`, `PLN`) from `bank.gov.ua` with a 1-hour in-memory cache and graceful fallback (`last_good` → static `FALLBACK_UAH_PER_UNIT` flagged with `rate_source: "fallback"`).
+- **Persistence:** SQLAlchemy 2.0 supporting SQLite locally and **PostgreSQL 16** in production (`User` and `Calculation` models; anonymous calculations are also stored to power `/api/stats`).
+- **Authentication & Security:**
+  - Local auth (`POST /api/auth/signup`, `POST /api/auth/signin`) uses stdlib PBKDF2-SHA256 (`390,000` iterations), server-enforced `password_confirm` validation, HS256 JWT Bearer tokens, and an in-memory brute-force limiter (`LoginRateLimiter` in `backend/app/core/rate_limit.py`: `429 Too Many Requests` with `Retry-After` after 5 failed attempts per email or 20 per IP in 15 minutes).
+  - **Google OAuth (`POST /api/auth/google`):** Verifies Google Identity Services ID tokens via `google.oauth2.id_token.verify_oauth2_token`, links `google_sub` to existing accounts by email or auto-registers OAuth users (`auth_provider="google"`, `password_hash="!oauth"`), backed by idempotent additive migrations in `init_db()`.
 
-1. **Сценарій 1 (Посилка > €150 та реформа липня 2027):** зареєструватися/увійти на сайті, розрахувати замовлення навушників з Amazon за **$220** із доставкою **$18** (вибір валюти USD), пояснити за формулою на екрані, як саме нараховано мито та ПДВ, і перевірити зміну податку в порівнянні **«Сьогодні vs Липень 2027»**.
-2. **Сценарій 2 (Авто, історія та кнопка донату):** розрахувати ввезення авто з Німеччини (2018 р., дизель 2.0 л, €10,000 + €800 доставка) або електромобіля (€12,000, 60 кВт·год), знайти обидва збережені розрахунки у вкладці **«Історія»**, відкрити модальне вікно **«Донат ЗСУ»** та оцінити готовність підтримати проєкт фінансово.
+### 2.3 Frontend SPA, AWS Infrastructure & CI/CD
 
-### 3.3 Повна зведена таблиця респондентів (`T-01`–`T-15`)
+- **Frontend (`frontend/`):** React 19 + TypeScript + Vite 8 + Tailwind CSS v4. Uses `AuthContext`, a typed `services/api.ts` client (translating all 401/422/429 backend errors into Ukrainian), `ModalShell.tsx` (Escape/backdrop dismiss, focus trapping, `aria-modal`), `ParcelForm`, `CarForm`, `ExciseForm`, `BreakdownView`, `CompareRulesModal`, `HistoryView`, `DonationModal`, and `StatsModal`.
+- **AWS Hosting (`infra/`):** Deployed on **AWS EC2 (`i-00ab50698f9435a50`, `t3.micro` + 2 GB swap, `eu-north-1`, Ubuntu 24.04)** via Docker Compose (`db`, `backend`, `frontend`, `caddy`). **Caddy v2** serves both the SPA and `/api/*` from a single Let's Encrypt HTTPS origin (`https://16.170.212.120.sslip.io`), eliminating CORS overhead and enforcing HSTS, `X-Frame-Options: DENY`, `CSP: frame-ancestors 'none'`, immutable asset caching, and `Server` header removal.
+- **GitHub Actions CI/CD (`.github/workflows/ci-cd.yml`):** Every push/PR runs `backend-tests` (`pytest`), `frontend-build` (`tsc -b && vite build`), and `infra-config` (`infra/test_caddy_config.sh`). Pushing to the dedicated **`deploy`** branch automatically fast-forwards the EC2 checkout, rebuilds containers (recreating Caddy when `Caddyfile` changes), and verifies `/api/health`, `/`, and security headers over HTTPS.
 
-| ID | Дата / час | Профіль досвіду | Виконання без підказок | Зрозумілість (1–5) | Зауваження / проблема (Q4) | Цитата (дослівно з Q6) |
+---
+
+## 3. User Testing Methodology & Cohort (4-Point Rubric Criterion)
+
+### 3.1 Recruitment Channels & Cohort Breakdown
+
+Moderated and asynchronous user-testing sessions were conducted on **17–18 November 2026** against the live HTTPS deployment (`https://16.170.212.120.sslip.io`). Following `docs/user-testing-plan.md` and `docs/recruiting-messages.md`, participants were recruited externally (no close friends) from:
+
+- Ukrainian online shopping Telegram groups (AliExpress, Amazon, iHerb, parcel forwarders);
+- Car import communities (EU/US vehicle sourcing and customs clearance chats);
+- Student channels and direct outreach linked to the structured Google Form (`docs/feedback/responces.csv`).
+
+In total, **N = 15 unique external testers (`T-01`–`T-15`)** submitted feedback:
+
+- Orders parcels up to €150 (AliExpress, Amazon, iHerb): **9 testers (60.0%)**
+- Orders parcels above €150: **3 testers (20.0%)**
+- Imported or plans to import a car from abroad: **2 testers (13.3%)**
+- Has not ordered yet, but interested: **1 tester (6.7%)**
+
+### 3.2 Two Core Test Scenarios
+
+1. **Scenario 1 — Parcel Above €150 & July 2027 Comparison:** Sign up or sign in, calculate a **$220** headphones order from Amazon with **$18** shipping (selecting `USD`), explain in their own words why the tax amount matches the displayed formula, and inspect the **Today vs. July 2027** comparison.
+2. **Scenario 2 — Used Car Import, History & Donation Modal:** Calculate customs for a 2018 2.0 L diesel car from Germany (€10,000 + €800 shipping) or a €12,000 / 60 kWh EV, locate both saved entries in **History**, open the **Donation** modal, and evaluate willingness to support a volunteer fund.
+
+### 3.3 Complete Tester Summary Table (`T-01`–`T-15`)
+
+| ID | Timestamp | User Profile | Task Completion (Q2) | Clarity (1–5) | Issue / Friction Reported (Q4) | Verbatim Quote (Q6) |
 |---|---|---|---|---|---|---|
-| `T-01` | 17.11 18:21 | Посилки до €150 | Так, усе інтуїтивно | 5 | «Впринципі нічого» | «Дуже добре, зручний сайт. Якщо буду щось замовляти - то обовʼково скористаюсь» |
-| `T-02` | 18.11 11:07 | Авто з-за кордону | Так, усе інтуїтивно | 4 | «Валюти відображаються нечітко, часто ховаються» | «Найс» |
-| `T-03` | 18.11 11:09 | Посилки до €150 | Так, усе інтуїтивно | 5 | «Немає авторизації через Гугл :(» | «Може бути, сам калькулятор супер, але реєстрація хромає» |
-| `T-04` | 18.11 11:12 | Посилки > €150 | Так, усе інтуїтивно | 5 | «нічого» | «позитивно» |
-| `T-05` | 18.11 11:12 | Посилки до €150 | Частково (потрібна підказка) | 3 | «Нічо» | «Позитивне» |
-| `T-06` | 18.11 11:14 | Посилки до €150 | Так, усе інтуїтивно | 4 | «все зрозуміло» | «хороше» |
-| `T-07` | 18.11 11:14 | Посилки до €150 | Так, усе інтуїтивно | 4 | «все достатньо добре» | «все чудово» |
-| `T-08` | 18.11 11:15 | Посилки > €150 | Так, усе інтуїтивно | 5 | «Все гарно оформлено і доступно» | «Позтивно!» |
-| `T-09` | 18.11 11:16 | Посилки до €150 | Частково (довелося пошукати) | 5 | «трошки загубився на платформі» | «Все чудово інтерфейс вау» |
-| `T-10` | 18.11 13:13 | Посилки до €150 | Ні, виникли помилки | 4 | Проблема з реєстрацією не-Google поштою `@cock.li` (сприйняв форму як Google-only); «числа мені сподобались» | «Загалом ідея та задумка в проєкту цікаві, числа при розрахунку мені теж сподобались...» *(критика залежності від Google)* |
-| `T-11` | 18.11 13:55 | Посилки до €150 | Частково (потрібна підказка) | 1 | «завис сайт» | «вау» |
-| `T-12` | 18.11 13:58 | Поки не замовляв(ла) | Ні, виникли помилки | 1 | «Завис сайт» | «Чудова ідея» |
-| `T-13` | 18.11 14:04 | Посилки > €150 | Так, усе інтуїтивно | 5 | «нічого» | «позитивне» |
-| `T-14` | 18.11 17:26 | Посилки до €150 | Так, усе інтуїтивно | 5 | «нічого» | «Все впринципі робоче» |
-| `T-15` | 18.11 17:27 | Авто з-за кордону | Так, усе інтуїтивно | 5 | «не викликало» | «норм сайт» |
+| `T-01` | 17.11 18:21 | Parcels ≤ €150 | Yes, intuitive | 5 | «Впринципі нічого» *(Nothing)* | «Дуже добре, зручний сайт. Якщо буду щось замовляти - то обовʼково скористаюсь» |
+| `T-02` | 18.11 11:07 | Car import | Yes, intuitive | 4 | «Валюти відображаються нечітко, часто ховаються» *(Currencies unclear/clipped)* | «Найс» |
+| `T-03` | 18.11 11:09 | Parcels ≤ €150 | Yes, intuitive | 5 | «Немає авторизації через Гугл :(» *(No Google login)* | «Може бути, сам калькулятор супер, але реєстрація хромає» |
+| `T-04` | 18.11 11:12 | Parcels > €150 | Yes, intuitive | 5 | «нічого» *(Nothing)* | «позитивно» |
+| `T-05` | 18.11 11:12 | Parcels ≤ €150 | Partial (needed hint) | 3 | «Нічо» *(Nothing)* | «Позитивне» |
+| `T-06` | 18.11 11:14 | Parcels ≤ €150 | Yes, intuitive | 4 | «все зрозуміло» *(Everything clear)* | «хороше» |
+| `T-07` | 18.11 11:14 | Parcels ≤ €150 | Yes, intuitive | 4 | «все достатньо добре» *(Good enough)* | «все чудово» |
+| `T-08` | 18.11 11:15 | Parcels > €150 | Yes, intuitive | 5 | «Все гарно оформлено і доступно» | «Позтивно!» |
+| `T-09` | 18.11 11:16 | Parcels ≤ €150 | Partial (searched) | 5 | «трошки загубився на платформі» *(Got slightly lost)* | «Все чудово інтерфейс вау» |
+| `T-10` | 18.11 13:13 | Parcels ≤ €150 | No (errors / stuck) | 4 | Thought `@cock.li` email signup was blocked by Google-only auth; liked the tax numbers | «Загалом ідея та задумка в проєкту цікаві, числа при розрахунку мені теж сподобались...» *(criticized perceived Google-only lock-in)* |
+| `T-11` | 18.11 13:55 | Parcels ≤ €150 | Partial (needed hint) | 1 | «завис сайт» *(Site hung)* | «вау» |
+| `T-12` | 18.11 13:58 | Interested | No (errors / stuck) | 1 | «Завис сайт» *(Site hung)* | «Чудова ідея» |
+| `T-13` | 18.11 14:04 | Parcels > €150 | Yes, intuitive | 5 | «нічого» *(Nothing)* | «позитивне» |
+| `T-14` | 18.11 17:26 | Parcels ≤ €150 | Yes, intuitive | 5 | «нічого» *(Nothing)* | «Все впринципі робоче» |
+| `T-15` | 18.11 17:27 | Car import | Yes, intuitive | 5 | «не викликало» *(No issues)* | «норм сайт» |
 
-**Агреговані метрики сесій:**
+**Cohort Rollup:**
 
-- Повністю самостійно виконали завдання: **10 / 15 (66.7%)**; частково: **3 / 15 (20.0%)** → **86.7% успішного або часткового виконання**; зіткнулися з перешкодою: **2 / 15 (13.3%)**.
-- Середня оцінка зрозумілості формул та порівняння правил: **4.07 / 5.0** загалом (**4.54 / 5.0** без двох оцінок `1` під час 3-хвилинного вікна деплою `13:55–13:58`).
+- **Completion rate:** **10 / 15 (66.7%)** fully intuitive + **3 / 15 (20.0%)** partial = **86.7% completed**; **2 / 15 (13.3%)** encountered blockers.
+- **Clarity rating (Q3):** **4.07 / 5.0** overall (**4.54 / 5.0** across the 13 sessions outside the 13:55–13:58 container rebuild window).
 
 ---
 
-## 4. Ключовий фідбек і зміни у продукті, внесені завдяки йому (4 бали)
+## 4. Key Feedback & Product Changes Made Because of It (4-Point Rubric Criterion)
 
-Кожне зауваження з тестування було проаналізоване та перетворене на конкретні технічні зміни в репозиторії протягом 18 листопада 2026 р.:
+Every concrete issue surfaced by testers on 18 November 2026 was traced to its root cause and shipped to `main` and `deploy`:
 
-| Відгук користувача | Першопричина | Внесена зміна (код / коміти) | Верифікація |
+| User Feedback | Root Cause | Change Implemented (Code / Commits) | Verification |
 |---|---|---|---|
-| **`T-03`:** *«Немає авторизації через Гугл :( … реєстрація хромає»* | Наявна лише форма email+пароль створювала тертя при швидкій реєстрації на мобільних | Реалізовано Google Identity Services ID-token flow: ендпоінт `POST /api/auth/google` (`AuthService.authenticate_google`, прив'язка `google_sub` або автореєстрація), кнопка в `AuthModal.tsx` на обох вкладках (`a8ff471`, `8ce0357`, `221012c`, `5b6c631`) | 4 нові unit-тести у `test_auth.py`; живий `openapi.json` і JS-бандл на EC2 містять `GOOGLE_CLIENT_ID`; `POST /api/auth/google` перевірено на проді |
-| **`T-10`:** побоювання щодо неможливості реєстрації альтернативною поштою (`@cock.li`) та сприйняття модалки як Google-only | Після додавання Google Sign-In класична email-форма могла сприйматися вторинною, а помилки валідації поверталися англійською | Збережено рівноправну форму email+пароль із візуальним розділювачем «або», додано підтвердження пароля `password_confirm` (`PR #7`, `25256d1`), усі повідомлення помилок перекладено українською в `frontend/src/services/api.ts` | Перевірено в `test_auth.py` та Playwright-прогоні: реєстрація довільним валідним email (не Gmail) працює незалежно від Google |
-| **`T-02`:** *«Валюти відображаються нечітко, часто ховаються»* | На вузьких екранах flex-контейнер перетискав `<select>` валют та одиниці виміру (`см³`, `кВт·год`), обрізаючи текст до `EU` | У `ParcelForm.tsx` і `CarForm.tsx` додано `min-w-0` для інпутів, `shrink-0 min-w-[76px]` і `appearance-none` із символами (`€ EUR`, `$ USD`, `₴ UAH`), а згодом прибрано зайві верхні чіпси (`e2c5554`, правки Анни `17:00`/`17:15`) | Збірка `npm run build` (0 помилок); візуальна перевірка на 360px/375px екранах без обрізання валют |
-| **`T-09`:** *«трошки загубився на платформі»* | На мобільних екранах переповнювався хедер навігації, помилки/результат з'являлися поза зоною видимості, а «Категорія товару» у посилках створювала зайвий крок | Винесено вкладки на окремий зручний рядок під хедером (`Navbar.tsx`, усунено горизонтальний скрол `f1666c5`, `PR #9`), прибрано фіктивну категорію посилок (`PR #8`, `c4bbd03`), додано автоскрол до помилки/результату (`App.tsx`, `PR #7`), інтерактивну картку-пояснення для «Хто відправник» та доступні модалки `ModalShell.tsx` (`54aa6d9`) | Мобільний аудит (320–768 px) без горизонтального скролу та обрізань; 82/82 UI-перевірки у Playwright |
-| **`T-11`, `T-12` (13:55–13:58):** *«завис сайт»* (оцінка `1`) | Обидва респонденти відкрили сайт саме під час перебілду Docker-контейнерів на `t3.micro` | Налаштовано детермінований GitHub Actions CI/CD через окрему гілку `deploy` (`.github/workflows/ci-cd.yml`, `PR #5`, `PR #6`, `13d7b04`) із Docker `HEALTHCHECK` та автоматичним очікуванням `200 OK` на `/api/health` і `/` | Деплої `44276538099`, `44340546457`, `44355562135`, `44359901645` завершилися успішно зі стабільним аптаймом |
-| Внутрішня ревізія юрист-правил під час тестування | Тестування привернуло увагу до граничних норм МКУ/ПКУ | Виправлено базу липня 2027 для посилок > €150 (`full_value`: €64 замість €16, `PR #8`), додано `5%` мита та `K_age = 1` для нових авто (`PR #7`/`PR #8`), додано вкладку «Підакцизні в багажі» (`PR #9`) та матрицю походження × відправлення (`PR #10`, `6370012`) | **257 тестів `pytest`** (включно з `test_law_oracle.py` та `test_spec_fixtures.py`) та 25/25 перевірок `check_law_updates.py` проходять |
+| **`T-03`:** *«Немає авторизації через Гугл :( … реєстрація хромає»* | Email+password-only sign-up added friction for mobile testers | Implemented Google Identity Services ID-token auth: `POST /api/auth/google` (`AuthService.authenticate_google`, linking `google_sub` or auto-registering OAuth accounts), Google Sign-In button on both Sign In and Sign Up tabs in `AuthModal.tsx`, and Docker/env wiring (`a8ff471`, `8ce0357`, `221012c`, `5b6c631`) | 4 unit tests in `test_auth.py`; live `openapi.json` & frontend bundle verified with `GOOGLE_CLIENT_ID`; invalid token returns `401` on prod |
+| **`T-10`:** Perceived inability to register with a non-Google email (`@cock.li`) | Placing Google Sign-In prominently could look Google-exclusive, and validation errors were in English | Preserved full email+password registration below an explicit «або» (or) divider, added `password_confirm` validation (`PR #7`, `25256d1`), and translated all 401/422/429 errors into Ukrainian in `frontend/src/services/api.ts` | Verified in `test_auth.py` and Playwright UI suite: non-Google emails register and sign in independently |
+| **`T-02`:** *«Валюти відображаються нечітко, часто ховаються»* | Narrow mobile flex layouts crushed `<select>` currency dropdowns and unit badges (`см³`, `кВт·год`) | Added `min-w-0` on inputs, `shrink-0 min-w-[76px]` and `appearance-none` with explicit symbols (`€ EUR`, `$ USD`, `₴ UAH`) in `ParcelForm.tsx` and `CarForm.tsx`, then removed redundant top pills for a clean single-row selector (`e2c5554`, Anna's 17:00/17:15 fixes) | `npm run build` (0 errors); verified at 360px/375px viewports with zero currency truncation |
+| **`T-09`:** *«трошки загубився на платформі»* | Mobile navbar overflowed horizontally, errors/results appeared off-screen, and the unused parcel category picker added a confusing step | Split mobile navigation into a dedicated tab bar below the header (`Navbar.tsx`, `f1666c5`, `PR #9`), removed the non-functional parcel category picker (`PR #8`, `c4bbd03`), added auto-scroll to results/errors (`App.tsx`, `PR #7`), added an interactive sender explainer card, and unified accessible modals via `ModalShell.tsx` (`54aa6d9`) | Mobile Playwright audit (320–768 px) clean with zero horizontal overflow; 82/82 UI checks passing |
+| **`T-11`, `T-12` (13:55–13:58):** *«завис сайт»* (rating `1`) | Both testers hit the server during a live Docker container rebuild on `t3.micro` | Standardized releases through the `deploy` branch in `.github/workflows/ci-cd.yml` (`PR #5`, `PR #6`, `13d7b04`) with `backend` `HEALTHCHECK`, Caddy reload detection, and post-deploy HTTPS health checks | Automated `deploy` runs `44276538099`, `44340546457`, `44355562135`, `44359901645` all green |
+| Legal edge-case review triggered during live testing | Testing highlighted edge cases in 2027 parcel VAT, new cars, luggage excise, and car origin | Fixed July 2027 >€150 base to `full_value` (`PR #8`), added 5% duty & `K_age = 1` for new cars (`PR #7`/`PR #8`), added the 11-item **Excise Goods in Luggage** tab (`PR #9`), and implemented `Origin × ShippedFrom` + russia import bans (`PR #10`, `6370012`) | **257** passing `pytest` tests (including `test_law_oracle.py` & `test_spec_fixtures.py`) and 25/25 `check_law_updates.py` checks |
 
 ---
 
-## 5. Готовність платити та реальна активність (Бонусний критерій)
+## 5. Willingness to Pay & Real-World Traction (Bonus Criterion)
 
-Для перевірки гіпотези цінності продукту ми вимірювали не лише компліменти, а й готовність користувачів підтримати волонтерський збір через кнопку **«Донат ЗСУ»** у шапці та підвалі сайту (`DonationModal.tsx` із прямими посиланнями на фонд «Повернись живим», Фонд Сергія Притули та Monobank-банку).
+To validate whether users value PidKlyuch beyond polite feedback, we included a voluntary volunteer-donation modal (`DonationModal.tsx` linking to Come Back Alive, Serhiy Prytula Foundation, and Monobank) and asked about donation behavior in Q5 of the survey (`docs/feedback/responces.csv`):
 
-### 5.1 Результати опитування (`docs/feedback/responces.csv`, питання 5)
-
-| Варіант відповіді | Кількість | Частка | Респонденти |
+| Survey Response (Q5) | Count | Share | Tester IDs |
 |---|---|---|---|
-| **«Так, вже задонатив(ла) (надішлю/прикріплю скріншот)»** | **3** | **20.0%** | `T-04`, `T-05`, `T-06` |
-| **«Готовий(а) задонатити 20–100 грн при реальному замовленні»** | **11** | **73.3%** | `T-01`, `T-02`, `T-03`, `T-07`, `T-08`, `T-09`, `T-10`, `T-11`, `T-12`, `T-13`, `T-14` |
-| **«Поки ні»** | **1** | **6.7%** | `T-15` |
-| **Разом позитивних (вже задонатили або готові донатити):** | **14 / 15** | **93.3%** | — |
+| **Already donated** (*«Так, вже задонатив(ла) (надішлю/прикріплю скріншот)»*) | **3** | **20.0%** | `T-04`, `T-05`, `T-06` |
+| **Willing to donate 20–100 UAH on a real order** (*«Готовий(а) задонатити 20–100 грн при реальному замовленні»*) | **11** | **73.3%** | `T-01`, `T-02`, `T-03`, `T-07`, `T-08`, `T-09`, `T-10`, `T-11`, `T-12`, `T-13`, `T-14` |
+| **Not yet** (*«Поки ні»*) | **1** | **6.7%** | `T-15` |
+| **Total positive (donated or willing to donate):** | **14 / 15** | **93.3%** | — |
 
-### 5.2 Прозорість щодо підтверджень і живі метрики `/api/stats`
+**Transparency on Evidence & Live Usage Metrics:**
 
-- **Щодо скріншотів донатів:** троє респондентів (`T-04`, `T-05`, `T-06`) вказали у формі, що вже зробили донат, проте поле посилання на скріншот (колонка 8 у `docs/feedback/responces.csv`) залишилося порожнім, а в репозиторії (`docs/assets/`) файли скріншотів на момент фіналізації звіту не прикріплені. Відповідно, ми фіксуємо **3 задекларовані донати без завантажених скріншотів** і **11 підтверджених намірів донату 20–100 грн** при реальному замовленні.
-- **Жива статистика використання (`GET https://16.170.212.120.sslip.io/api/stats` на 18.11.2026 20:55):**
-  - Загалом збережених розрахунків у PostgreSQL: **77** (після віднімання **4** задокументованих анонімних тестових розрахунків команди — **73 користувацькі розрахунки**);
-  - Зареєстрованих користувачів: **4** (основна частина тестувальників тестувала калькулятор анонімно або зафіксувала баги реєстрації до додавання Google Sign-In);
-  - Повторних користувачів у різні UTC-дні (`returning_users`): **0** (оскільки публічне тестування проходило в межах 17–18 листопада).
+- **Donation screenshots:** While 3 respondents (`T-04`, `T-05`, `T-06`) reported having already donated, column 8 (screenshot URL) in `docs/feedback/responces.csv` was left blank and no image files were uploaded to `docs/assets/`. We therefore report **3 self-reported donations without uploaded screenshots** alongside **11 explicit commitments to donate 20–100 UAH** on real orders.
+- **Production `/api/stats` snapshot (`https://16.170.212.120.sslip.io/api/stats`, 18 Nov 2026 20:55):**
+  - **77** total saved calculations in PostgreSQL (**73** user calculations after subtracting **4** documented anonymous verification runs by the team);
+  - **4** registered user accounts (most testers evaluated the calculator anonymously or tested before Google Sign-In was deployed);
+  - **0** multi-day `returning_users` (expected within a 2-day testing window).
 
 ---
 
-## 6. Висновки та подальший план (Lessons Learned & Roadmap)
+## 6. Lessons Learned
 
-### 6.1 Уроки командної розробки та інженерії
-
-1. **Єдиний файл контексту `AGENTS.md` для різних AI-агентів:** команда використовувала різні інструменти (Claude Code, Gemini CLI / Antigravity), і суворий протокол читання/оновлення `AGENTS.md` (API-контракт §8, журнал §12, рунбуки §14) дозволив паралельно вести бекенд, фронтенд та інфраструктуру без розсинхронізації.
-2. **Не можна покладатися на перекази законів у медіа:** повторна звірка з першоджерелами на `zakon.rada.gov.ua` виявила суттєві деталі (повна база оподаткування в липні 2027 для посилок > €150, 5% мито для нових великооб'ємних авто, `K_age = 1` для нових авто, заборона алкоголю/тютюну в поштових відправленнях). Автоматизація цього контролю через `test_law_oracle.py` і `check_law_updates.py` захистила від регресій.
-3. **Деплой не повинен ламати активну сесію користувачів:** оцінки `1` від `T-11` і `T-12` показали, що навіть короткий простій під час збірки Docker-образів на `t3.micro` напряму б'є по довірі перших користувачів.
-
-### 6.2 Подальші кроки (Roadmap)
-
-- **Zero-downtime деплой:** перенести збірку Docker-образів у GitHub Actions (GHCR) або виділити `t3.small`, щоб оновлення не створювали затримок для живих користувачів.
-- **Покриття рідкісних митних кейсів:** додати розрахунок для електромобілів із range-extender (`8703 80 x0 90`: 8% мита + фіксований акциз €100), перевірити ставки 2027 року для угод про вільну торгівлю (ЄС/Велика Британія/ОАЕ) та додати об'єднання кількох підакцизних товарів в одному багажі.
-- **Продуктові фічі V1:** порівняння 3 поштових форвардів поруч, email/Telegram-сповіщення при спрацюванні `check_law_updates.py`, обмеження введення грошових полів до 2 знаків після коми на рівні UI та збір реальних скріншотів донатів на наступній ітерації тестування.
+1. **Shared Context (`AGENTS.md`) Enables Multi-Agent Parallelism:** Because team members worked across different AI agents (Claude Code and Gemini CLI / Antigravity), maintaining a single source of truth in `AGENTS.md` (API contract §8, change log §12, operational runbooks §14) allowed backend, frontend, and AWS infrastructure to evolve rapidly in parallel without integration drift.
+2. **Primary Legal Sources Beat Secondary Summaries:** Re-reading the enacted texts on `zakon.rada.gov.ua` uncovered critical rules that news articles glossed over — including full-value taxation for parcels > €150 starting in July 2027, `K_age = 1` for never-used vehicles regardless of manufacture year, and the postal ban on alcohol/tobacco/e-liquids. Encoding these in `tax_rates.json` with an independent law oracle (`test_law_oracle.py`) and automated clause fingerprinting (`check_law_updates.py`) prevented regressions.
+3. **Deployment Stability Directly Impacts User Trust:** The two `1/5` ratings (`T-11`, `T-12`) occurred solely because testers accessed the site during a live container rebuild. Moving releases onto the gated `deploy` branch in GitHub Actions with `HEALTHCHECK` and automated HTTP verification eliminated ad-hoc manual restarts on the server.
+4. **Auth Friction & Mobile Ergonomics Matter Most:** Real users immediately flagged missing Google Sign-In (`T-03`), unclear mobile currency selectors (`T-02`), and mobile navigation crowding (`T-09`) — none of which were obvious in desktop developer testing, underscoring the value of testing with external users on mobile devices.

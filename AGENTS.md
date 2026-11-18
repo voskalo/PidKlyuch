@@ -229,9 +229,9 @@ PidKlyuch/
 └── docs/                      # Customs spec, user-testing docs, report (owner: Anton)
     ├── customs-rules.md       # Locked Ukrainian customs spec (parcels, cars, NBU rates, 10 test cases)
     ├── feedback/responces.csv # Exported Google Form responses from 15 external testers (T-01..T-15)
-    ├── PidKlyuch-Report.pdf   # Final 6-page Ukrainian OOAD project report PDF (generated from docs/report.md)
+    ├── PidKlyuch-Report.pdf   # Final 5-page English OOAD project report PDF (generated from docs/report.md)
     ├── recruiting-messages.md # Ukrainian outreach templates for Telegram/FB/DMs (15+ testers)
-    ├── report.md              # Final Ukrainian OOAD project report (architecture, 15-tester cohort, changes, willingness to pay)
+    ├── report.md              # Final English OOAD project report (architecture, 15-tester cohort, changes, willingness to pay)
     └── user-testing-plan.md   # Moderator script (2 tasks), Google Form questions, 15-tester tracker table
 ```
 
@@ -990,6 +990,15 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **Decisions & why:** Rendered PDF from `docs/report.md` via WeasyPrint (`Arial` Unicode + `@page` running headers/footers + repeated `thead` across page breaks) for crisp Cyrillic tables; recorded donation evidence honestly (`3` declared already donated + `11` ready to donate 20–100 UAH, with no screenshot files uploaded in `responces.csv` or `docs/assets/`).
 - **How to verify / run:** Open `docs/PidKlyuch-Report.pdf` (6 pages, 113,431 bytes) and `docs/report.md`.
 - **Not done / known problems / next steps:** Collect actual donation screenshots if testers send them before the Thursday 19 Nov demo.
+
+### 2026-11-18 21:10: Rewrite final OOAD report in English & remove future roadmap (`docs/report.md`, `docs/PidKlyuch-Report.pdf`)
+- **Who:** Anton Vertyporoh via Antigravity CLI
+- **Area:** docs
+- **What was done:** Rewrote `docs/report.md` in academic English (preserving verbatim Ukrainian tester quotes from `docs/feedback/responces.csv`), removed the future-roadmap section, audited all branches (`origin/deploy` at `13d7b04`, PRs `#1`–`#10`) so every implemented feature and automated `deploy` workflow is accurately documented, and regenerated `docs/PidKlyuch-Report.pdf` (5 A4 pages, 106,924 bytes) via WeasyPrint 70.0. Visually verified all 5 rendered pages with `pypdfium2`.
+- **Files touched:** `docs/report.md` (modified), `docs/PidKlyuch-Report.pdf` (modified), `AGENTS.md` (§6, §12)
+- **Decisions & why:** English report matches course submission norms while retaining exact Ukrainian quotes for evidence integrity; tightened layout to 5 full pages with no orphan trailing section.
+- **How to verify / run:** Open `docs/PidKlyuch-Report.pdf` (5 pages) and `docs/report.md`.
+- **Not done / known problems / next steps:** None for the report itself.
 
 ---
 
