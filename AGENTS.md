@@ -1000,6 +1000,15 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **How to verify / run:** Open `docs/PidKlyuch-Report.pdf` (5 pages) and `docs/report.md`.
 - **Not done / known problems / next steps:** None for the report itself.
 
+### 2026-11-18 22:35: Remove all donation & willingness-to-pay mentions from report (`docs/report.md`, `docs/PidKlyuch-Report.pdf`)
+- **Who:** Anton Vertyporoh via Antigravity CLI
+- **Area:** docs
+- **What was done:** Removed Section 5 ("Willingness to Pay & Real-World Traction") and all mentions of donations, volunteer fundraising, and `DonationModal` from Sections 1, 2.3, and 3.2 of `docs/report.md`; moved the `/api/stats` snapshot (`77` total / `73` user calculations, `4` registered accounts) into Section 3.3 ("Cohort Rollup"); renumbered Lessons Learned to Section 5; verified zero raw LaTeX escapes; regenerated `docs/PidKlyuch-Report.pdf` (5 A4 pages, 100,524 bytes) via WeasyPrint 70.0 and visually verified all pages.
+- **Files touched:** `docs/report.md` (modified), `docs/PidKlyuch-Report.pdf` (modified), `AGENTS.md` (§12)
+- **Decisions & why:** Report now focuses strictly on product architecture, user testing methodology/cohort, feedback-driven changes, and lessons learned.
+- **How to verify / run:** Open `docs/PidKlyuch-Report.pdf` (5 pages) and `docs/report.md`.
+- **Not done / known problems / next steps:** None.
+
 ---
 
 ## 13. Domain notes: Ukrainian customs (RE-VERIFIED 2026-11-18 against the official law texts)
