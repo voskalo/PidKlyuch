@@ -308,6 +308,9 @@ export const ParcelForm: React.FC<ParcelFormProps> = ({
                 <li>
                   <strong>Приватна особа:</strong> подарунки від рідних чи друзів вартістю <strong>до €45 залишаються безмитними</strong>!
                 </li>
+                <li>
+                  <strong>Посилка понад €150:</strong> мито 10% і ПДВ 20% рахуватимуться з <strong>усієї вартості</strong>, а не лише з різниці понад €150.
+                </li>
               </ul>
             </div>
           )}

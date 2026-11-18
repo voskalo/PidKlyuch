@@ -143,7 +143,7 @@ export const CompareRulesModal: React.FC<CompareRulesModalProps> = ({
                 </div>
                 <div className="flex justify-between text-slate-600">
                   <span>Мито (10%):</span>
-                  <span className="font-semibold text-slate-900">Лише на суму понад €150</span>
+                  <span className="font-semibold text-slate-900">На всю вартість посилки понад €150</span>
                 </div>
               </div>
 
@@ -186,7 +186,7 @@ export const CompareRulesModal: React.FC<CompareRulesModalProps> = ({
               • <strong>Зараз:</strong> посилки до €150 не оподатковуються взагалі.
             </p>
             <p>
-              • <strong>З липня 2027:</strong> обов’язковий ПДВ 20% нараховується на кожну комерційну посилку будь-якої вартості (сплачуватиметься безпосередньо маркетплейсом при оплаті).
+              • <strong>З липня 2027:</strong> ПДВ 20% нараховується на кожну посилку до €150 (з маркетплейсів — одразу при оплаті), а для посилок понад €150 мито 10% і ПДВ 20% рахуються з усієї вартості, а не лише з різниці понад €150.
             </p>
             <p>
               • Подарунки від приватних осіб без комерційної мети залишаються безмитними до <strong>€45</strong>.

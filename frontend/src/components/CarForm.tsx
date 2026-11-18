@@ -344,7 +344,7 @@ export const CarForm: React.FC<CarFormProps> = ({ onCalculated, onError }) => {
               </span>
             </div>
             <p className="text-[11px] text-slate-500 mt-1">
-              Стандартна ставка ввізного мита України
+              Стандартна ставка ввізного мита України (5% для нових бензинових авто понад 3000 см³)
             </p>
           </button>
         </div>
