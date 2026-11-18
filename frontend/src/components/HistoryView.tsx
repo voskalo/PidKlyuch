@@ -179,8 +179,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onGoToCalculator }) =>
                         </>
                       ) : (
                         <>
-                          Ціна товару: {String(item.input.item_price || '')} {String(item.input.currency || 'EUR')} • Категорія:{' '}
-                          {String(item.input.category || '')}
+                          Ціна товару: {String(item.input.item_price || '')} {String(item.input.currency || 'EUR')}
                         </>
                       )}
                     </div>
