@@ -615,6 +615,15 @@ Format: `YYYY-MM-DD: decision: reason (who)`
   401, `/api/auth/google` exists, and `/` returns 200. Runbook §14.1 marked DONE; it stays as the reference for an
   IP change or a broken deploy.
 
+### 2026-11-18 11:35: Verify Runbook §14.1 (C1–C8) and GitHub Actions auto-deploy
+- **Who:** Anton Vertyporoh via Antigravity CLI
+- **Area:** infra / docs
+- **What was done:** Pulled PR #6 (`8d80bdf`) from `origin/main` and independently verified all §14.1 checks: C1 (`.github/workflows/ci-cd.yml` on `main`, `deploy` at `5b6c631`), C3 (`ubuntu@16.170.212.120` reachable via `~/.ssh/pidklyuch-ec2.pem`), C4 (`/home/ubuntu/PidKlyuch` clean, `ENV_OK`, `DOCKER_OK`), C5 (`github-actions-deploy@PidKlyuch` present once in `~/.ssh/authorized_keys`), C7 (GitHub Actions run `44276538099` on `deploy` completed `success`), and C8 (`/api/health` returns `{"status":"ok"}`, invalid car returns `422` for `engine_volume_cc`, server `HEAD` matches `deploy` `5b6c631`).
+- **Files touched:** `AGENTS.md` (§12)
+- **Decisions & why:** none (releasing to production is `git push origin main:deploy`).
+- **How to verify / run:** `curl -s "https://api.github.com/repos/voskalo/PidKlyuch/actions/runs?branch=deploy&per_page=1"` and `curl -s https://16.170.212.120.sslip.io/api/health`.
+- **Not done / known problems / next steps:** Local AWS CLI SSO/login session for `main-aws` expired (`aws login` if needed for future EC2 CLI queries; does not affect GitHub Actions SSH auto-deploy).
+
 ---
 
 ## 13. Domain notes: Ukrainian customs (VERIFIED & LOCKED 2026-11-17)
