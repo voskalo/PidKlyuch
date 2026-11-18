@@ -567,6 +567,15 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **How to verify / run:** `cd backend && .venv/bin/pytest -v` (`126 passed in 0.67s`).
 - **Not done / known problems / next steps:** Step 2 (frontend Google Sign-In UI) and Step 3–4 (infra, docs, live EC2 deploy).
 
+### 2026-11-18 11:26: Add Google Sign-In UI flow in frontend (`AuthModal`, `AuthContext`, `api.ts`)
+- **Who:** Anton Vertyporoh via Antigravity CLI (cross-area request in `frontend/` following Anna's React/TS patterns)
+- **Area:** frontend
+- **What was done:** Added `api.googleAuth(credential)` in `frontend/src/services/api.ts` posting `{ credential }` to `/api/auth/google` and persisting the returned JWT token; added `googleLogin(credential)` to `AuthContext`; updated `frontend/src/components/AuthModal.tsx` to load Google Identity Services (`https://accounts.google.com/gsi/client`) dynamically when `VITE_GOOGLE_CLIENT_ID` is set, render the localized (`uk`) Google button on both Sign In and Sign Up tabs, and hide the Google block cleanly without errors when `VITE_GOOGLE_CLIENT_ID` is empty.
+- **Files touched:** `frontend/src/services/api.ts`, `frontend/src/context/AuthContext.tsx`, `frontend/src/components/AuthModal.tsx`, `AGENTS.md`
+- **Decisions & why:** Dynamic script loader caches a singleton promise and measures modal container width dynamically (`Math.min(360, Math.max(220, offsetWidth))`) so the Google iframe never overflows narrow mobile viewports.
+- **How to verify / run:** `cd frontend && npm run lint && npm run build && VITE_GOOGLE_CLIENT_ID=test npm run build` (0 errors).
+- **Not done / known problems / next steps:** Step 3 (infra + docs + push) and Step 4 (live EC2 deploy).
+
 ---
 
 ## 13. Domain notes: Ukrainian customs (VERIFIED & LOCKED 2026-11-17)
