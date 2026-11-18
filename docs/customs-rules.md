@@ -31,7 +31,7 @@ This document is the single source of truth for all customs duty, excise, and VA
 | **Laws № 5025-IX & № 5026-IX (15.10.2026)** | July 2027 parcel reform: ≤€150 → VAT 20% on the full value, no duty; P2P gifts ≤€45 VAT-free (ПКУ 197.30); **>€150 → duty 10% and VAT 20% on the FULL value** (Law 5026-IX item 19 rewrites МКУ 374 p.7; Law 5025-IX item 6 rewrites ПКУ 191.1.1) | https://zakon.rada.gov.ua/laws/show/5025-20 , https://zakon.rada.gov.ua/laws/show/5026-20 |
 | **Customs Code Art. 368** | Invoice value of citizens' goods; freight/insurance are added only for unaccompanied baggage and cargo shipments, so **shipping is not counted for postal/express parcels** | https://zakon.rada.gov.ua/laws/show/4495-17 |
 | **Tax Code Art. 191.1.1** | Today's VAT base for parcels of individuals: the part of the invoice value above €150 **plus the duty** | https://zakon.rada.gov.ua/laws/show/2755-17 |
-| **Customs Tariff (Law № 2697-IX), heading 8703** | 10% passenger car duty; **5% for new petrol cars and new petrol hybrids > 3000 cm³** (8703 24 10 00, 8703 40 10 80, 8703 60 10 80); 0% for electric cars (8703 80 x0 10) | https://zakon.rada.gov.ua/laws/show/2697б-20 |
+| **Customs Tariff (Law № 2697-IX), heading 8703** | 10% passenger car duty; **5% for new petrol cars and new petrol hybrids > 3000 cm³** (8703 24 10 00, 8703 40 10 80, 8703 60 10 80); 0% for electric cars (8703 80 x0 10). **Not modeled:** range-extender EVs (8703 80 x0 90: 8% duty, €100 excise per TC 215.3.5-1) and new motorhomes 1500–3000 cm³ (5%). Diesel hybrids (8703 50/70) = diesel rates (10%, diesel excise) | https://zakon.rada.gov.ua/laws/show/2697б-20 |
 | **EU-Ukraine Association Agreement (DCFTA)** | 0% duty for EU-origin cars in 2026 (State Customs Service letter № 15/15-03-02/20836 of 22.12.2025), only with EUR.1 / origin declaration; set per calendar year | https://www.qdpro.com.ua/goodinfo/8703239013 |
 | **State Budget Law 2026 (№ 4695-IX)** | Expiry of EV 0% VAT exemption as of 01.01.2026 (standard 20% VAT applies) | https://zakon.rada.gov.ua |
 | **State Customs Service of Ukraine** | Official guidance on postal/express parcel clearance & passenger car import | https://customs.gov.ua |
@@ -166,7 +166,7 @@ Applies to passenger vehicles (UKTZED heading `8703`) imported into Ukraine.
 | `battery_capacity_kwh` ($B_{\text{kWh}}$) | `Decimal` | Traction battery capacity in kWh (required for `electric`) |
 | `production_year` ($Y_{\text{prod}}$) | `int` | Vehicle manufacturing year (used with `current_year` $Y_{\text{curr}}$, default `2026`, to compute $K_{\text{age}}$) |
 | `origin` | `enum` | `"other"` (standard 10% duty) or `"eu"` (0% preferential duty under DCFTA **only** with EUR.1 / origin declaration) |
-| `is_new` | `bool?` | Optional. Customs Tariff "new" (never used). If omitted, a car made in the current year or later counts as new. Only affects the 5% rate below |
+| `is_new` | `bool?` | Optional. Customs Tariff "new" (never used). If omitted, a car made in the current year or later counts as new. Affects the 5% rate below and sets $K_{\text{age}} = 1$ |
 
 *(Note: Under ПКУ Art. 215.3.5-1, spark-ignition `hybrid` vehicles have no separate flat excise rate; they pay excise by their internal combustion engine displacement $E_{\text{cm3}}$ using the `petrol` base rate. Diesel hybrids should select `engine_type = "diesel"`.)*
 
@@ -200,6 +200,7 @@ where:
 3. **Age coefficient ($K_{\text{age}}$):**  
    Statutory Ukrainian rule counts full calendar years from the year **following** manufacture up to the year of customs clearance, with a minimum of `1` (for new and 1-year-old vehicles) and a maximum cap of `15`:
    $$K_{\text{age}} = \min\Big(15,\; \max\big(1,\; Y_{\text{curr}} - Y_{\text{prod}} - 1\big)\Big)$$
+   **A new (never used) car always has $K_{\text{age}} = 1$, whatever its production year** — TC 215.3.5-1: "для нових транспортних засобів … коефіцієнт дорівнює 1" (e.g. an unsold 2022 car cleared in 2026: $K_{\text{age}} = 1$, not 3).
    *(Deterministic API contract option: if the caller or unit test supplies `age_years` directly, apply $K_{\text{age}} = \min(15, \max(1, \text{age\_years}))$; when only `production_year` is given, use $Y_{\text{curr}} - Y_{\text{prod}} - 1$ clamped to $[1, 15]$.)*
 
 #### Electric Vehicles (`electric`)
