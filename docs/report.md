@@ -17,9 +17,9 @@ What is implemented and live in production (`origin/deploy` @ `13d7b04` on `http
 - **Parcels:** Calculation under current rules (**€150** duty-free threshold, 10% duty + 20% VAT on the excess; a €200 parcel adds €16.00 in taxes) alongside a **Today vs. July 2027** comparison implementing enacted Laws № 5025-IX and № 5026-IX (20% VAT from the first euro on marketplace parcels, €45 exemption for non-commercial private gifts, and taxation on the full value above €150).
 - **Passenger Cars:** Duty computed by **country of origin × country of dispatch** (preferential 0% rates for EU, EFTA, UK, Canada, Israel, and 2/3-rate for UAE under direct-transport rules; 5% duty for new petrol/hybrid cars > 3,000 cm³; import bans for shipments from/through russia), excise (`base × engine_litres × K_age`, with `K_age = 1` for new cars and €1/kWh for EVs), and 20% VAT.
 - **Excisable Goods in Luggage:** 11 categories (beer, wine, sparkling wine, spirits, cigarettes, cigars, smoking tobacco, heated sticks, e-liquids, petrol, diesel) applying Customs Code Art. 376 duty-free allowances, the 24-hour rule, and 2026/2027 excise schedules.
-- **Accounts, History & Donations:** Email/password registration (JWT + confirmation + brute-force rate limiting), **Google Sign-In (`POST /api/auth/google`)**, persistent calculation history in PostgreSQL 16, live `/api/stats`, and a volunteer donation modal («Повернись живим», Serhiy Prytula Foundation, Monobank).
+- **Accounts & History:** Email/password registration (JWT + confirmation + brute-force rate limiting), **Google Sign-In (`POST /api/auth/google`)**, persistent calculation history in PostgreSQL 16, and live `/api/stats`.
 
-Across **15 external testers (`T-01`–`T-15`)**, **86.7%** completed the core tasks fully or partially without moderator intervention, the average clarity score was **4.07 / 5.0** (**4.54 / 5.0** excluding two responses during a 3-minute midday container rebuild), and **93.3% (14/15)** reported they had already donated or are willing to donate 20–100 UAH on a real order.
+Across **15 external testers (`T-01`–`T-15`)**, **86.7%** completed the core tasks fully or partially without moderator intervention, and the average clarity score was **4.07 / 5.0** (**4.54 / 5.0** excluding two responses during a 3-minute midday container rebuild).
 
 ---
 
@@ -49,7 +49,7 @@ All tax logic resides exclusively in the backend so rules are never duplicated o
 
 ### 2.3 Frontend SPA, AWS Infrastructure & CI/CD
 
-- **Frontend (`frontend/`):** React 19 + TypeScript + Vite 8 + Tailwind CSS v4. Uses `AuthContext`, a typed `services/api.ts` client (translating all 401/422/429 backend errors into Ukrainian), `ModalShell.tsx` (Escape/backdrop dismiss, focus trapping, `aria-modal`), `ParcelForm`, `CarForm`, `ExciseForm`, `BreakdownView`, `CompareRulesModal`, `HistoryView`, `DonationModal`, and `StatsModal`.
+- **Frontend (`frontend/`):** React 19 + TypeScript + Vite 8 + Tailwind CSS v4. Uses `AuthContext`, a typed `services/api.ts` client (translating all 401/422/429 backend errors into Ukrainian), `ModalShell.tsx` (Escape/backdrop dismiss, focus trapping, `aria-modal`), `ParcelForm`, `CarForm`, `ExciseForm`, `BreakdownView`, `CompareRulesModal`, `HistoryView`, and `StatsModal`.
 - **AWS Hosting (`infra/`):** Deployed on **AWS EC2 (`i-00ab50698f9435a50`, `t3.micro` + 2 GB swap, `eu-north-1`, Ubuntu 24.04)** via Docker Compose (`db`, `backend`, `frontend`, `caddy`). **Caddy v2** serves both the SPA and `/api/*` from a single Let's Encrypt HTTPS origin (`https://16.170.212.120.sslip.io`), eliminating CORS overhead and enforcing HSTS, `X-Frame-Options: DENY`, `CSP: frame-ancestors 'none'`, immutable asset caching, and `Server` header removal.
 - **GitHub Actions CI/CD (`.github/workflows/ci-cd.yml`):** Every push/PR runs `backend-tests` (`pytest`), `frontend-build` (`tsc -b && vite build`), and `infra-config` (`infra/test_caddy_config.sh`). Pushing to the dedicated **`deploy`** branch automatically fast-forwards the EC2 checkout, rebuilds containers (recreating Caddy when `Caddyfile` changes), and verifies `/api/health`, `/`, and security headers over HTTPS.
 
@@ -75,7 +75,7 @@ In total, **N = 15 unique external testers (`T-01`–`T-15`)** submitted feedbac
 ### 3.2 Two Core Test Scenarios
 
 1. **Scenario 1 — Parcel Above €150 & July 2027 Comparison:** Sign up or sign in, calculate a **$220** headphones order from Amazon with **$18** shipping (selecting `USD`), explain in their own words why the tax amount matches the displayed formula, and inspect the **Today vs. July 2027** comparison.
-2. **Scenario 2 — Used Car Import, History & Donation Modal:** Calculate customs for a 2018 2.0 L diesel car from Germany (€10,000 + €800 shipping) or a €12,000 / 60 kWh EV, locate both saved entries in **History**, open the **Donation** modal, and evaluate willingness to support a volunteer fund.
+2. **Scenario 2 — Used Car Import & History:** Calculate customs for a 2018 2.0 L diesel car from Germany (€10,000 + €800 shipping) or a €12,000 / 60 kWh EV, and locate both saved entries in **History**.
 
 ### 3.3 Complete Tester Summary Table (`T-01`–`T-15`)
 
@@ -101,6 +101,7 @@ In total, **N = 15 unique external testers (`T-01`–`T-15`)** submitted feedbac
 
 - **Completion rate:** **10 / 15 (66.7%)** fully intuitive + **3 / 15 (20.0%)** partial = **86.7% completed**; **2 / 15 (13.3%)** encountered blockers.
 - **Clarity rating (Q3):** **4.07 / 5.0** overall (**4.54 / 5.0** across the 13 sessions outside the 13:55–13:58 container rebuild window).
+- **Production `/api/stats` snapshot (18 Nov 2026 20:55):** **77** total saved calculations in PostgreSQL (**73** user calculations after subtracting **4** documented anonymous verification runs by the team) and **4** registered user accounts.
 
 ---
 
@@ -119,28 +120,7 @@ Every concrete issue surfaced by testers on 18 November 2026 was traced to its r
 
 ---
 
-## 5. Willingness to Pay & Real-World Traction (Bonus Criterion)
-
-To validate whether users value PidKlyuch beyond polite feedback, we included a voluntary volunteer-donation modal (`DonationModal.tsx` linking to Come Back Alive, Serhiy Prytula Foundation, and Monobank) and asked about donation behavior in Q5 of the survey (`docs/feedback/responses.csv`):
-
-| Survey Response (Q5) | Count | Share | Tester IDs |
-|---|---|---|---|
-| **Already donated** (*«Так, вже задонатив(ла) (надішлю/прикріплю скріншот)»*) | **3** | **20.0%** | `T-04`, `T-05`, `T-06` |
-| **Willing to donate 20–100 UAH on a real order** (*«Готовий(а) задонатити 20–100 грн при реальному замовленні»*) | **11** | **73.3%** | `T-01`, `T-02`, `T-03`, `T-07`, `T-08`, `T-09`, `T-10`, `T-11`, `T-12`, `T-13`, `T-14` |
-| **Not yet** (*«Поки ні»*) | **1** | **6.7%** | `T-15` |
-| **Total positive (donated or willing to donate):** | **14 / 15** | **93.3%** | — |
-
-**Transparency on Evidence & Live Usage Metrics:**
-
-- **Donation screenshots:** While 3 respondents (`T-04`, `T-05`, `T-06`) reported having already donated, column 8 (screenshot URL) in `docs/feedback/responses.csv` was left blank and no image files were uploaded to `docs/assets/`. We therefore report **3 self-reported donations without uploaded screenshots** alongside **11 explicit commitments to donate 20–100 UAH** on real orders.
-- **Production `/api/stats` snapshot (`https://16.170.212.120.sslip.io/api/stats`, 18 Nov 2026 20:55):**
-  - **77** total saved calculations in PostgreSQL (**73** user calculations after subtracting **4** documented anonymous verification runs by the team);
-  - **4** registered user accounts (most testers evaluated the calculator anonymously or tested before Google Sign-In was deployed);
-  - **0** multi-day `returning_users` (expected within a 2-day testing window).
-
----
-
-## 6. Lessons Learned
+## 5. Lessons Learned
 
 1. **Shared Context (`AGENTS.md`) Enables Multi-Agent Parallelism:** Because team members worked across different AI agents (Claude Code and Gemini CLI / Antigravity), maintaining a single source of truth in `AGENTS.md` (API contract §8, change log §12, operational runbooks §14) allowed backend, frontend, and AWS infrastructure to evolve rapidly in parallel without integration drift.
 2. **Primary Legal Sources Beat Secondary Summaries:** Re-reading the enacted texts on `zakon.rada.gov.ua` uncovered critical rules that news articles glossed over — including full-value taxation for parcels > €150 starting in July 2027, `K_age = 1` for never-used vehicles regardless of manufacture year, and the postal ban on alcohol/tobacco/e-liquids. Encoding these in `tax_rates.json` with an independent law oracle (`test_law_oracle.py`) and automated clause fingerprinting (`check_law_updates.py`) prevented regressions.
