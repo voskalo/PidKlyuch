@@ -2,6 +2,7 @@ from datetime import date as Date
 from decimal import Decimal
 from typing import Annotated, Literal
 
+from fastapi import Body
 from pydantic import BaseModel, Field, model_validator
 
 Currency = Literal["EUR", "USD", "UAH", "GBP", "PLN"]
@@ -38,7 +39,9 @@ class CarIn(BaseModel):
         return self
 
 
-CalculationIn = Annotated[ParcelIn | CarIn, Field(discriminator="delivery_type")]
+# Body(discriminator=...) makes FastAPI validate ONLY the model selected by delivery_type, so a bad car
+# gets car errors (not "Input should be 'parcel'" from trying ParcelIn first).
+CalculationIn = Annotated[ParcelIn | CarIn, Body(discriminator="delivery_type")]
 
 
 class TaxLineOut(BaseModel):
