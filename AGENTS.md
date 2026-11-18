@@ -420,11 +420,7 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - [x] Fill in "How to run" and "How to deploy" in `README.md` (Anton + Liubomyr + Anna).
 - [x] Create user-testing script, Google Form questions, master tracker (`docs/user-testing-plan.md`), and Ukrainian recruiting templates (`docs/recruiting-messages.md`) (Anton).
 - [x] Merge `anton/infra-and-docs` (PR #3) into `main` (merged 17.11).
-- [ ] **ONE-TIME, to enable auto-deploy (Anton, ~1 min):** on the EC2 server run
-  `echo '<contents of infra/deploy_key.pub>' >> ~/.ssh/authorized_keys` as user `ubuntu`, then on your laptop
-  `git push origin main:deploy` (or re-run the failed "CI/CD" run in the Actions tab). Until then every deploy run
-  fails at the SSH step (harmless: nothing on the server changes). If the repo on the server is not at
-  `/home/ubuntu/PidKlyuch`, set the `EC2_APP_DIR` secret. This deploy also ships the 18.11 backend bug fixes.
+- [x] **ONE-TIME, to enable auto-deploy (Anton, ~1 min):** appended `infra/deploy_key.pub` to `ubuntu@16.170.212.120:~/.ssh/authorized_keys` and fast-forwarded `origin/deploy` from `main` (18.11).
 - [ ] Schedule `cd backend && python scripts/check_law_updates.py` weekly and alert team on non-zero exit (Anton).
 - [ ] Run Wednesday user-testing sessions (15+ external testers, collect quotes, UX fixes, and donation screenshots) and write `docs/report.pdf` (all, Wed 18 – Thu 19 Nov).
 - [ ] Re-check by hand when the Cabinet sets the start date of the July 2027 parcel VAT (source `law_5025_ix`) (Liubomyr).
@@ -589,6 +585,15 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **Decisions & why:** none (consistent with existing `VITE_API_BASE_URL` build-arg pattern).
 - **How to verify / run:** `docker compose --env-file infra/.env.example -f infra/docker-compose.yml config`
 - **Not done / known problems / next steps:** Step 4 (live AWS EC2 deploy and HTTPS verification).
+
+### 2026-11-18 11:29: Deploy Google Sign-In update to AWS EC2 (`https://16.170.212.120.sslip.io`)
+- **Who:** Anton Vertyporoh via Antigravity CLI
+- **Area:** infra / docs
+- **What was done:** Connected via SSH to `ubuntu@16.170.212.120`, switched `/home/ubuntu/PidKlyuch` to `main` and fast-forwarded to `origin/main` (`221012c`), appended `infra/deploy_key.pub` to `~/.ssh/authorized_keys`, added `GOOGLE_CLIENT_ID` and `VITE_GOOGLE_CLIENT_ID` (`173388861976-tejqvtfmt2emurajvrim2i6huq75rnd5.apps.googleusercontent.com`) to `/home/ubuntu/PidKlyuch/infra/.env`, and rebuilt/restarted Compose containers (`docker compose --env-file .env up -d --build`). Verified all containers up/healthy and all HTTPS endpoints live.
+- **Files touched:** `AGENTS.md` (§11, §12)
+- **Decisions & why:** none
+- **How to verify / run:** `curl -fsSL https://16.170.212.120.sslip.io/openapi.json | grep -o '"/api/auth/google"'` (`"/api/auth/google"`), `curl -s -o /dev/null -w "%{http_code}" https://16.170.212.120.sslip.io/api/docs` (`200`), `curl -s -o /dev/null -w "%{http_code}" https://16.170.212.120.sslip.io/` (`200`), `POST /api/auth/google` with invalid token (`401 {"detail":"Invalid Google token"}`), and live JS bundle contains `VITE_GOOGLE_CLIENT_ID`.
+- **Not done / known problems / next steps:** None for Google Sign-In deploy; test interactively with a real Google account in browser (ensure `https://16.170.212.120.sslip.io` is in Authorized JavaScript origins in Google Cloud Console).
 
 ---
 
