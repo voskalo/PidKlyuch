@@ -558,6 +558,15 @@ Format: `YYYY-MM-DD: decision: reason (who)`
   (§11, Anton). Not tested end-to-end against the server yet for that reason. If the EC2 IP changes, update
   `EC2_HOST` and `EC2_KNOWN_HOSTS`.
 
+### 2026-11-18 11:24: Add Google OAuth ID-token sign-in endpoint (`POST /api/auth/google`)
+- **Who:** Anton Vertyporoh via Antigravity CLI (cross-area request in `backend/` with Liubomyr's auth pattern)
+- **Area:** backend
+- **What was done:** Added `google-auth==2.37.0` and `requests==2.32.3` to `backend/requirements.txt`; added `GOOGLE_CLIENT_ID` (`google_client_id`) to `Settings` and `backend/.env.example`; made `User.password_hash` nullable and added `google_sub` + `auth_provider` columns with safe idempotent `_migrate_users_table()` `ALTER TABLE` logic in `init_db()` (Postgres + SQLite); guarded `verify_password()` against empty/OAuth password hashes; added `GoogleAuthIn`, `InvalidGoogleToken`, `AuthService.authenticate_google()`, and `POST /api/auth/google` returning `TokenOut`; added 4 unit tests in `backend/tests/test_auth.py` mocking `id_token.verify_oauth2_token` (auto-registration, email account linking, invalid token 401, unverified email & audience forwarding).
+- **Files touched:** `backend/requirements.txt`, `backend/.env.example`, `backend/app/core/{config.py,database.py,security.py}`, `backend/app/models/user.py`, `backend/app/api/{auth.py,schemas_auth.py}`, `backend/app/services/auth_service.py`, `backend/tests/test_auth.py`, `AGENTS.md`
+- **Decisions & why:** OAuth-only users get `password_hash="!oauth"` and `auth_provider="google"`, keeping existing password auth rejected (`401`) while remaining compatible even with pre-existing SQLite tables; additive `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` in `init_db()` preserves production Postgres data without destructive migrations.
+- **How to verify / run:** `cd backend && .venv/bin/pytest -v` (`126 passed in 0.67s`).
+- **Not done / known problems / next steps:** Step 2 (frontend Google Sign-In UI) and Step 3–4 (infra, docs, live EC2 deploy).
+
 ---
 
 ## 13. Domain notes: Ukrainian customs (VERIFIED & LOCKED 2026-11-17)

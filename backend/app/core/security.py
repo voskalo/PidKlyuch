@@ -21,7 +21,9 @@ def hash_password(password: str) -> str:
     )
 
 
-def verify_password(password: str, stored: str) -> bool:
+def verify_password(password: str, stored: str | None) -> bool:
+    if not stored:
+        return False
     try:
         algo, iterations, salt_b64, digest_b64 = stored.split("$")
     except ValueError:
