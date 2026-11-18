@@ -115,13 +115,14 @@ export const ParcelForm: React.FC<ParcelFormProps> = ({
         {/* Item price */}
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+            <label htmlFor="parcel-price" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
               1. Вартість товару *
             </label>
             <span className="text-[11px] text-slate-400">інвойсна ціна</span>
           </div>
           <div className="flex rounded-xl shadow-sm border border-slate-300 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/30 focus-within:border-blue-500">
             <input
+              id="parcel-price"
               type="number"
               step="any"
               min="0"
@@ -155,13 +156,14 @@ export const ParcelForm: React.FC<ParcelFormProps> = ({
         {/* Shipping price */}
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+            <label htmlFor="parcel-shipping" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
               2. Вартість доставки
             </label>
             <span className="text-[11px] text-slate-400">до України</span>
           </div>
           <div className="flex rounded-xl shadow-sm border border-slate-300 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/30 focus-within:border-blue-500">
             <input
+              id="parcel-shipping"
               type="number"
               step="any"
               min="0"

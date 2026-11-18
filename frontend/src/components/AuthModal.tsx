@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X, Mail, Lock, User as UserIcon, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
+import { ModalShell } from './ModalShell';
 import { useAuth } from '../context/AuthContext';
 
 const GOOGLE_CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID || '').trim();
@@ -240,8 +241,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain border border-slate-100">
+    <ModalShell onClose={onClose} labelledBy="auth-modal-title" panelClassName="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain border border-slate-100">
         {/* Header Tabs */}
         <div className="flex border-b border-slate-100 bg-slate-50/70 relative">
           <button
@@ -280,6 +280,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </button>
           <button
             onClick={onClose}
+            aria-label="Закрити"
             className="absolute top-3.5 right-3.5 text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-200/50 transition-colors"
           >
             <X className="w-5 h-5" />
@@ -289,7 +290,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div className="text-center mb-2">
-            <h3 className="text-lg font-bold text-slate-900">
+            <h3 id="auth-modal-title" className="text-lg font-bold text-slate-900">
               {mode === 'signin' ? 'З поверненням!' : 'Створити обліковий запис'}
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -334,12 +335,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
           {mode === 'signup' && (
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label htmlFor="auth-name" className="block text-xs font-semibold text-slate-700 mb-1">
                 Ваше ім'я (необов'язково)
               </label>
               <div className="relative">
                 <UserIcon className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                 <input
+              id="auth-name"
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -351,12 +353,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           )}
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
+            <label htmlFor="auth-email" className="block text-xs font-semibold text-slate-700 mb-1">
               Електронна пошта *
             </label>
             <div className="relative">
               <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
               <input
+              id="auth-email"
+              data-autofocus
                 type="email"
                 required
                 value={email}
@@ -368,12 +372,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
+            <label htmlFor="auth-password" className="block text-xs font-semibold text-slate-700 mb-1">
               Пароль (від 8 символів) *
             </label>
             <div className="relative">
               <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
               <input
+              id="auth-password"
                 type="password"
                 required
                 minLength={8}
@@ -391,12 +396,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
           {mode === 'signup' && (
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label htmlFor="auth-password-confirm" className="block text-xs font-semibold text-slate-700 mb-1">
                 Повторіть пароль *
               </label>
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                 <input
+              id="auth-password-confirm"
                   type="password"
                   required
                   autoComplete="new-password"
@@ -480,7 +486,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             )}
           </p>
         </form>
-      </div>
-    </div>
+      </ModalShell>
   );
 };

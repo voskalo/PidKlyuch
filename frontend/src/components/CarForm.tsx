@@ -213,13 +213,14 @@ export const CarForm: React.FC<CarFormProps> = ({ onCalculated, onError }) => {
         {/* Car price */}
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+            <label htmlFor="car-price" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
               2. Вартість автомобіля *
             </label>
             <span className="text-[11px] text-slate-400">ціна купівлі</span>
           </div>
           <div className="flex rounded-xl shadow-sm border border-slate-300 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/30 focus-within:border-blue-500">
             <input
+              id="car-price"
               type="number"
               step="any"
               min="1"
@@ -250,13 +251,14 @@ export const CarForm: React.FC<CarFormProps> = ({ onCalculated, onError }) => {
         {/* Shipping to border */}
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+            <label htmlFor="car-shipping" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
               3. Доставка до кордону України
             </label>
             <span className="text-[11px] text-slate-400">входить у митну вартість</span>
           </div>
           <div className="flex rounded-xl shadow-sm border border-slate-300 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/30 focus-within:border-blue-500">
             <input
+              id="car-shipping"
               type="number"
               step="any"
               min="0"
@@ -278,13 +280,14 @@ export const CarForm: React.FC<CarFormProps> = ({ onCalculated, onError }) => {
         {engineType === 'electric' ? (
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+              <label htmlFor="car-battery" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
                 4. Ємність батареї (кВт⋅год) *
               </label>
               <span className="text-[11px] text-slate-400">акциз 1 € за 1 кВт⋅год</span>
             </div>
             <div className="flex rounded-xl shadow-sm border border-slate-200 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/30 focus-within:border-blue-500">
               <input
+              id="car-battery"
                 type="number"
                 step="any"
                 min="1"
@@ -306,13 +309,14 @@ export const CarForm: React.FC<CarFormProps> = ({ onCalculated, onError }) => {
         ) : (
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+              <label htmlFor="car-engine-volume" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
                 4. Об'єм двигуна (см³) *
               </label>
               <span className="text-[11px] text-slate-400">наприклад, 1998</span>
             </div>
             <div className="flex rounded-xl shadow-sm border border-slate-200 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/30 focus-within:border-blue-500">
               <input
+              id="car-engine-volume"
                 type="number"
                 min="100"
                 max="10000"
@@ -343,7 +347,7 @@ export const CarForm: React.FC<CarFormProps> = ({ onCalculated, onError }) => {
         {/* Manufacture Year */}
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+            <label htmlFor="car-year" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
               5. Рік випуску *
             </label>
             <span className="text-[11px] text-blue-600 font-semibold flex items-center gap-1">
@@ -353,6 +357,7 @@ export const CarForm: React.FC<CarFormProps> = ({ onCalculated, onError }) => {
           </div>
           <div className="flex rounded-xl shadow-sm border border-slate-200 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/30 focus-within:border-blue-500">
             <input
+              id="car-year"
               type="number"
               min={MIN_YEAR}
               max={currentYear}

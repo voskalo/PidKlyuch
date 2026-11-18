@@ -34,6 +34,8 @@ const DETAIL_UK: Record<string, string> = {
   'Invalid Google token': 'Не вдалося увійти через Google. Спробуйте ще раз',
   'Not authenticated': 'Сесія завершилася. Увійдіть в акаунт знову',
   'Calculation not found': 'Розрахунок не знайдено (можливо, його вже видалено)',
+  'Too many sign-in attempts, try again later':
+    'Забагато невдалих спроб входу. Зачекайте 15 хвилин і спробуйте знову',
 };
 
 const FIELD_UK: Record<string, string> = {

@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     # PBKDF2 iterations for password hashing (lowered in tests for speed)
     password_hash_iterations: int = 390_000
     google_client_id: str = ""
+    # Sign-in brute-force protection: failed attempts allowed per account / per client IP within the window
+    login_max_failures_per_account: int = 5
+    login_max_failures_per_ip: int = 20
+    login_window_seconds: int = 15 * 60
 
     @property
     def GOOGLE_CLIENT_ID(self) -> str:

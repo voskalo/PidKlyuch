@@ -1,5 +1,6 @@
 import React from 'react';
 import { X, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { ModalShell } from './ModalShell';
 import type { CompareRulesResult } from '../types/api';
 
 interface CompareRulesModalProps {
@@ -26,20 +27,20 @@ export const CompareRulesModal: React.FC<CompareRulesModalProps> = ({
   const diffTaxUah = julyTaxUah - currentTaxUah;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden border border-slate-100 flex flex-col max-h-[90vh]">
+    <ModalShell onClose={onClose} labelledBy="compare-modal-title" panelClassName="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden border border-slate-100 flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-slate-50">
           <div>
             <div className="inline-flex items-center gap-1.5 bg-blue-100 text-blue-700 text-xs px-2.5 py-0.5 rounded-full font-semibold mb-1">
               Закони № 5025-IX / 5026-IX
             </div>
-            <h3 className="font-bold text-slate-900 text-lg">
+            <h3 id="compare-modal-title" className="font-bold text-slate-900 text-lg">
               Порівняння правил: Зараз vs Липень 2027
             </h3>
           </div>
           <button
             onClick={onClose}
+            aria-label="Закрити"
             className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-200/50 transition-colors"
           >
             <X className="w-5 h-5" />
@@ -203,7 +204,6 @@ export const CompareRulesModal: React.FC<CompareRulesModalProps> = ({
             Зрозуміло
           </button>
         </div>
-      </div>
-    </div>
+      </ModalShell>
   );
 };

@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from app.core.database import Base, engine  # noqa: E402
 from app.main import app  # noqa: E402
+from app.core.rate_limit import login_limiter  # noqa: E402
 from app.services.rates_service import RatesService, get_rates_service  # noqa: E402
 
 # Fake NBU payload: 1 EUR = 50 UAH, 1 USD = 40 UAH (easy mental math in tests)
@@ -24,6 +25,7 @@ FAKE_NBU = [
 @pytest.fixture()
 def client():
     Base.metadata.drop_all(bind=engine)
+    login_limiter.reset()  # the limiter is process-wide; start every test with no failed sign-ins
     app.dependency_overrides[get_rates_service] = lambda: RatesService(fetcher=lambda: FAKE_NBU)
     with TestClient(app) as c:
         yield c
