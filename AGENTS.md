@@ -776,7 +776,7 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **How to verify / run:** `cd backend && .venv/bin/pytest` (172 passed); `.venv/bin/python scripts/check_law_updates.py`
   (11 `[ok]`); `cd frontend && npm run build`; scratch Playwright suite 63/63 (adds: K_age 1 for a new 2014 diesel =
   €150 excise vs €1650 used, checkbox texts, hybrid/EV hints).
-- **Not done / known problems / next steps:** not deployed yet (branch `liubomyr/tax-recheck-2`); range-extender EVs.
+- **Not done / known problems / next steps:** range-extender EVs (§11). Deployed with PR #8 (see the next entry).
 
 
 ### 2026-11-18 (evening): Removed the parcel goods category; €45 gift rule re-checked
@@ -801,7 +801,12 @@ Format: `YYYY-MM-DD: decision: reason (who)`
   saved history keep working.
 - **How to verify / run:** `cd backend && .venv/bin/pytest` (173 passed); `cd frontend && npm run build`; scratch
   Playwright suite 65/65.
-- **Not done / known problems / next steps:** not deployed yet (branch `liubomyr/tax-recheck-2`).
+- **Not done / known problems / next steps:** none.
+- **Deployed 18.11 (evening):** PR #8 merged (`c4bbd03`), `git push origin main:deploy`, deploy run 44347118003 green
+  (https://github.com/voskalo/PidKlyuch/actions/runs/44347118003). Verified live: €200 parcel = €16 / €64 with an old
+  `category` field (ignored, via `compare-rules`, not saved); July 2027 excise note present; never-used 2014 EU diesel
+  2.0 → excise "75 € × 2 л × 1 (коеф. віку, нове авто) = 150.00" (1 more anonymous test calculation saved — 2 in total
+  today, subtract them in the report); live bundle has the new texts and no "Категорія товару".
 
 ---
 
