@@ -67,14 +67,19 @@ export const CarForm: React.FC<CarFormProps> = ({ onCalculated, onError }) => {
 
   const currentYear = new Date().getFullYear();
   const yearNum = parseInt(manufactureYear, 10);
-  const kAge = !isNaN(yearNum)
+  const kAgeByYear = !isNaN(yearNum)
     ? Math.min(15, Math.max(1, currentYear - yearNum - 1))
     : 1;
 
-  // "New car" only changes the result for non-EU petrol/hybrid cars over 3000 cm³ (5% duty instead of 10%).
-  const showIsNew =
+  // "New car" (never used) changes the result in two cases, and the checkbox is shown only then:
+  //  - 5% duty instead of 10% for non-EU petrol/hybrid cars over 3000 cm³ (Customs Tariff 8703);
+  //  - K_age = 1 for any new combustion-engine car, whatever its year (TC 215.3.5-1).
+  const newCutsDuty =
     (engineType === 'petrol' || engineType === 'hybrid') && origin === 'other' && Number(engineVolumeCc) > 3000;
+  const newCutsKAge = engineType !== 'electric' && kAgeByYear > 1;
+  const showIsNew = newCutsDuty || newCutsKAge;
   const isNew = isNewOverride ?? (!isNaN(yearNum) && yearNum >= currentYear);
+  const kAge = showIsNew && isNew ? 1 : kAgeByYear;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -261,7 +266,7 @@ export const CarForm: React.FC<CarFormProps> = ({ onCalculated, onError }) => {
               </div>
             </div>
             <p className="text-[11px] text-slate-500 mt-1">
-              Для електромобілів мито завжди 0%, ПДВ 20%
+              Лише для повністю електричних авто: мито 0%, ПДВ 20%. Авто з ДВЗ-генератором (range extender) мають мито 8% і акциз €100 — калькулятор їх не рахує
             </p>
           </div>
         ) : (
@@ -295,7 +300,7 @@ export const CarForm: React.FC<CarFormProps> = ({ onCalculated, onError }) => {
             </div>
             <p className="text-[11px] text-slate-500 mt-1">
               {engineType === 'hybrid'
-                ? 'Гібрид розраховується за об’ємом ДВЗ за ставкою бензину'
+                ? 'Бензиновий гібрид: акциз за об’ємом ДВЗ за ставкою бензину. Дизельний гібрид — оберіть «Дизель»'
                 : 'Впливає на базову ставку та коефіцієнт об’єму'}
             </p>
           </div>
@@ -391,7 +396,12 @@ export const CarForm: React.FC<CarFormProps> = ({ onCalculated, onError }) => {
             <div>
               <div className="text-xs font-bold text-slate-900">Нове авто (раніше не використовувалося)</div>
               <p className="text-[11px] text-slate-500 mt-0.5">
-                Для нових бензинових авто й гібридів понад 3000 см³ мито 5% замість 10% (Митний тариф, 8703)
+                {`Для нового авто: ${[
+                  newCutsKAge && 'коефіцієнт віку = 1 незалежно від року випуску (ПКУ 215.3.5-1)',
+                  newCutsDuty && 'мито 5% замість 10% для бензинових авто й гібридів понад 3000 см³ (Митний тариф, 8703)',
+                ]
+                  .filter(Boolean)
+                  .join('; ')}`}
               </p>
             </div>
           </label>
