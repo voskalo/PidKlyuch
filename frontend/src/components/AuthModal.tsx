@@ -241,7 +241,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-100">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain border border-slate-100">
         {/* Header Tabs */}
         <div className="flex border-b border-slate-100 bg-slate-50/70 relative">
           <button
@@ -458,7 +458,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     setMode('signup');
                     setError(null);
                   }}
-                  className="font-semibold text-blue-600 hover:underline"
+                  className="font-semibold text-blue-600 hover:underline py-1.5 px-1 -my-1.5"
                 >
                   Зареєструватися
                 </button>
@@ -472,7 +472,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     setMode('signin');
                     setError(null);
                   }}
-                  className="font-semibold text-blue-600 hover:underline"
+                  className="font-semibold text-blue-600 hover:underline py-1.5 px-1 -my-1.5"
                 >
                   Увійти
                 </button>

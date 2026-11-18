@@ -57,7 +57,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           {/* Center navigation tabs (desktop only) */}
-          <nav className="hidden md:flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+          <nav className="hidden lg:flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
             <button
               onClick={() => onSelectTab('calculator')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
@@ -98,7 +98,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               className="p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors hidden sm:flex items-center gap-1 text-xs font-medium"
             >
               <BarChart2 className="w-4 h-4" />
-              <span className="hidden md:inline">Метрики</span>
+              <span className="hidden lg:inline">Метрики</span>
             </button>
 
             {/* Donation button */}
@@ -147,7 +147,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Bottom tab bar (mobile only, < md) */}
-        <div className="pb-2.5 pt-0.5 md:hidden">
+        <div className="pb-2.5 pt-0.5 lg:hidden">
           <nav className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl w-full">
             <button
               onClick={() => onSelectTab('calculator')}
