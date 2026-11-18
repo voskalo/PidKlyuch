@@ -143,7 +143,7 @@ Update the Status column above when a criterion is met.
 | Backend language/framework | **Python 3.12+ / FastAPI** | `backend/`, entry point `app.main:app` (uvicorn on `$PORT`, default `8000`, `--proxy-headers`) |
 | ORM / Database | **SQLAlchemy 2.0**: SQLite locally, **PostgreSQL 16** in prod | Set via `DATABASE_URL` (`postgres:16-alpine` in Compose or AWS RDS Postgres); tables auto-created on startup via `init_db()` |
 | Auth method | **JWT bearer tokens** (PyJWT, HS256) + optional **Google Sign-In** (GIS ID tokens) | Passwords hashed with stdlib PBKDF2-SHA256 (`390,000` iterations); Google ID tokens verified via `google-auth` (`POST /api/auth/google`) |
-| Tests | **pytest** + FastAPI `TestClient` | `cd backend && .venv/bin/pytest` (126 tests passing on `main`) |
+| Tests | **pytest** + FastAPI `TestClient` | `cd backend && .venv/bin/pytest` (164 tests passing on `liubomyr/verify-tax-rules`) |
 | Frontend framework | **React 19 / TypeScript / Vite 8 / Tailwind CSS v4** | `frontend/`, Lucide Icons, dev proxy `/api` → `127.0.0.1:8000`; built with Node 22 and served on `:80` behind Caddy in prod |
 | Hosting (backend & frontend) | **AWS EC2 (Ubuntu 24.04)** + **Docker Compose + Caddy v2** (automatic HTTPS) | Single HTTPS origin via `<EC2-IP>.sslip.io` (Let's Encrypt TLS); `/api/*` → `backend:8000`, `/*` → `frontend:80` |
 | Database (prod) | **PostgreSQL 16** (Docker Compose `db` or **AWS RDS for PostgreSQL**) | Set via `DATABASE_URL` (`?sslmode=require` if using RDS; never SQLite in prod) |
@@ -184,9 +184,12 @@ PidKlyuch/
 │   │   ├── models/            # SQLAlchemy ORM models: user.py (User), calculation.py (Calculation)
 │   │   ├── services/          # auth_service.py, rates_service.py, calculation_service.py, history_service.py
 │   │   └── customs/           # pure Python engine: tax_rates.json, rules.py, models.py, calculators.py
-│   └── tests/                 # pytest (126 tests). Run: cd backend && .venv/bin/pytest
+│   └── tests/                 # pytest (164 tests). Run: cd backend && .venv/bin/pytest
 │                              #   test_edge_cases.py = hostile/boundary input (bad tokens, NaN, decimals, thresholds
 │                              #   after conversion, car year/engine bounds, signup race, CORS) + 17.11 regressions
+│                              #   test_law_oracle.py = the law re-implemented independently, compared with the API on
+│                              #   1000 seeded random/boundary inputs (change BOTH it and tax_rates.json when a rate changes)
+│                              #   test_spec_fixtures.py = the 10 worked cases of docs/customs-rules.md §5.3 through the engine
 ├── frontend/                  # React 19 + TypeScript + Vite SPA (owner: Anna)
 │   ├── package.json           # React 19, TypeScript, Vite 8, Tailwind CSS v4, Lucide Icons
 │   ├── vite.config.ts         # dev server on port 5173 with proxy /api → http://127.0.0.1:8000
@@ -198,7 +201,9 @@ PidKlyuch/
 │       ├── index.css          # Tailwind CSS v4 root stylesheet
 │       ├── App.tsx            # Main UI layout, hero, calculator tabs (parcels/cars), state & modals
 │       ├── types/api.ts       # TypeScript models matching backend §8 contract
-│       ├── services/api.ts    # Fetch API wrapper with JWT Bearer auth & VITE_API_BASE_URL
+│       ├── services/api.ts    # Fetch API wrapper with JWT Bearer auth & VITE_API_BASE_URL; translates backend
+│       │                      #   errors (detail strings, 422 lists, network failure) into Ukrainian
+│       ├── utils/amount.ts    # parseAmount(): price input check mirroring the API limits (0…10 000 000, cents)
 │       ├── context/AuthContext.tsx # React AuthProvider (user state, login/signup/logout, token storage)
 │       └── components/        # Navbar, RatesBar, ParcelForm, CarForm, BreakdownView, CompareRulesModal, HistoryView, AuthModal, DonationModal, StatsModal, Footer
 ├── .github/workflows/ci-cd.yml # CI on every push/PR (backend pytest + frontend build); push to `deploy` → auto-deploy to EC2
@@ -294,10 +299,13 @@ instead of silently not saving to history. Retrying without the header works ano
 - On any `401`, clear the token and show sign-in.
 - CORS allows `http://localhost:5173` (Vite) and `http://localhost:3000` by default.
 
-**POST /api/auth/signup**: body `{"email": "a@b.com", "password": "8–128 chars", "name": "Anna"}` (`name` optional,
-max 100 chars, trimmed; blank → `null`; the email is trimmed and lowercased)
+**POST /api/auth/signup**: body `{"email": "a@b.com", "password": "8–128 chars", "password_confirm": "same again", "name": "Anna"}`
+(`name` optional, max 100 chars, trimmed; blank → `null`; the email is trimmed and lowercased)
 → `201 {"access_token": "...", "token_type": "bearer", "user": {"id": 1, "email": "a@b.com", "name": "Anna", "created_at": "ISO"}}`.
-`409` if the email is already registered.
+`409` if the email is already registered. **`password_confirm` is required (since 18.11)** and must equal `password`
+exactly (case-sensitive, no trimming); otherwise `422` with `detail[].loc[-1] == "password_confirm"` and msg
+`"Value error, Passwords do not match"` (or type `missing`), and no account is created. If `password` itself is invalid
+(too short/long), only the `password` error is reported. Sign-in does NOT take `password_confirm`.
 
 **POST /api/auth/signin**: body `{"email", "password"}` → `200`, same shape as signup. `401` on wrong credentials.
 
@@ -412,6 +420,13 @@ Format: `YYYY-MM-DD: decision: reason (who)`
   deploy key, a pinned host key, and fast-forward-only updates on the server (never `reset --hard`, never touches
   `infra/.env`). Alternative considered: GitHub OIDC → IAM role → SSM Run Command (no SSH key) — better long-term,
   but needs IAM setup in Anton's AWS account; not worth it the day before the demo. (Liubomyr + Claude Code)
+- 2026-11-18: **Sign-up asks for the password twice, and the backend enforces it** (`password_confirm` required in
+  `SignUpIn`, exact match). Reason: a typo in a single password field creates an account the user cannot sign in to;
+  checking only in the UI would let any other client skip it. (Liubomyr + Claude Code)
+- 2026-11-18: The UI validates prices against the API limits before sending (`utils/amount.ts`), rounds extra decimals
+  to cents instead of failing, and `services/api.ts` translates every backend error to Ukrainian. Reason: users saw
+  English pydantic texts ("Decimal input should have no more than 2 decimal places", "Email already registered").
+  (Liubomyr + Claude Code)
 ---
 
 ## 11. Open issues / TODO
@@ -429,8 +444,8 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - [ ] Run Wednesday user-testing sessions (15+ external testers, collect quotes, UX fixes, and donation screenshots) and write `docs/report.pdf` (all, Wed 18 – Thu 19 Nov).
 - [ ] Re-check by hand when the Cabinet sets the start date of the July 2027 parcel VAT (source `law_5025_ix`) (Liubomyr).
 - [ ] Optional: a "luggage" delivery type. The rules are already verified (Customs Code 374 p.1 and p.4) (Liubomyr).
-- [ ] Frontend: show a Ukrainian message after a 401 on calculate, and limit price inputs to 2 decimals (Anna).
-- [ ] Frontend (optional): a "нове авто (не використовувалося)" checkbox in `CarForm.tsx` that sends `is_new`. Without it, the backend treats a car made this year as new (Anna).
+- [x] Frontend: Ukrainian messages for 401/422/network errors and 2-decimal price handling (done 18.11 by Liubomyr, see §12).
+- [x] Frontend: "Нове авто" checkbox in `CarForm.tsx` that sends `is_new` (done 18.11 by Liubomyr, see §12).
 - [ ] In January 2027, re-check the EU-origin car duty rate for 2027 (source `dcfta_car_duty`) (Liubomyr).
 
 ---
@@ -678,6 +693,52 @@ Format: `YYYY-MM-DD: decision: reason (who)`
   (11 `[ok]`); `cd frontend && npm run build`.
 - **Not done / known problems / next steps:** optional `is_new` checkbox in the UI (Anna); EU 2027 rate check in Jan 2027;
   the live site gets these changes on the next `git push origin main:deploy`.
+
+
+### 2026-11-18: Edge-case audit of the whole calculator + password confirmation on sign-up
+- **Who:** Liubomyr Voskalo via Claude Code (Opus 5.5)
+- **Area:** backend + frontend (cross-area: edits in Anna's `frontend/`, listed below)
+- **What was done:**
+  - **Password typed twice on sign-up.** Backend: `SignUpIn.password_confirm` (required, exact match, validator
+    `_passwords_match` in `backend/app/api/schemas_auth.py`) → 422 on mismatch, no account created (§8). Frontend:
+    `AuthModal.tsx` sign-up mode has a "Повторіть пароль *" field in the existing style, a live hint ("Паролі не
+    збігаються" red / "Паролі збігаються" green), red border + `aria-invalid` on mismatch, submit blocked until they
+    match, the error banner clears when a password is edited, `autoComplete` new-password/current-password. Sign-in
+    still has one field. `api.signup(email, password, passwordConfirm, name?)`, `AuthContext.signup` updated.
+  - **Calculator bugs fixed (found by probing like a user):**
+    1. "Порівняти правила" under a parcel result did nothing unless the form's compare button had been used, and then
+       showed the comparison of an OLD price. `App.tsx` now keeps the last parcel request and fetches a fresh
+       comparison for it (`handleCompareFromResult`).
+    2. Prices with 3+ decimals or over 10 000 000 produced English 422 texts. New `frontend/src/utils/amount.ts`
+       (`parseAmount`) checks limits with Ukrainian messages and rounds to cents; used by `ParcelForm` and `CarForm`.
+    3. All backend errors are shown in Ukrainian (`services/api.ts`: `DETAIL_UK`, per-field 422 texts, offline →
+       "Немає з'єднання з сервером…").
+    4. Engine volume typed in litres ("1.6") now gets "Схоже, це об'єм у літрах… 1600 см³" in the field's own
+       validation bubble (`engineVolumeProblem` in `CarForm.tsx`); battery limited to 500 kWh like the API; year
+       range 1950…current year like the API (was 1980).
+    5. On phones the error banner (top) and the result (below the form) were off-screen: `App.tsx` scrolls them into
+       view.
+    6. New "Нове авто (раніше не використовувалося)" checkbox in `CarForm.tsx`, shown only when it matters
+       (non-EU petrol/hybrid over 3000 cm³); default = made this year; sends `is_new` only then.
+  - **Proof of the math:** `backend/tests/test_law_oracle.py` re-implements the law independently and compares it with
+    `/api/calculate` on 1000 seeded random + boundary inputs (6000 in a one-off run: 0 mismatches). Mutation check:
+    changing any of duty 10%, the 5% exception, its 3000 cm³ limit, the 2027 base or the €150 threshold in
+    `tax_rates.json` makes it fail.
+  - **Browser test (Playwright, scratch, not committed):** 57/57 UI checks on desktop + 375 px phone: sign-up mismatch
+    blocked (no request sent), case/space differences, empty confirmation, duplicate email and wrong password in
+    Ukrainian, €200 → €16 today / €64 July 2027, €45 gift, €150 / €150.01 boundaries, stale-compare fix, rounding,
+    too-big/negative/empty prices, offline, litres hint, `is_new` checkbox (5% vs 10%), 1975 car, EV, history, garbage
+    token, no horizontal scroll, no JS errors.
+- **Files touched:** `backend/app/api/schemas_auth.py`, `backend/tests/{test_auth.py,test_edge_cases.py,test_history.py,
+  test_law_oracle.py (new)}`, `frontend/src/{App.tsx,services/api.ts,types/api.ts,context/AuthContext.tsx,
+  utils/amount.ts (new),components/AuthModal.tsx,components/ParcelForm.tsx,components/CarForm.tsx}`, `README.md`
+  (test count), `AGENTS.md` (§5, §6, §8, §10, §11, §12).
+- **Decisions & why:** see §10 (password confirmation enforced in the backend; UI-side price checks + translation).
+- **How to verify / run:** `cd backend && .venv/bin/pytest` (164 passed); `.venv/bin/python scripts/check_law_updates.py`
+  (11 `[ok]`); `cd frontend && npx tsc -b --noEmit && npm run lint && npm run build` (0 errors, only the 7 old warnings).
+- **Not done / known problems / next steps:** a browser tab left open on the OLD frontend during the deploy gets a 422
+  on sign-up until it reloads (the new backend requires `password_confirm`). Live site gets all this on the next
+  `git push origin main:deploy` after PR #7 is merged.
 
 ---
 
