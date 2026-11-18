@@ -403,6 +403,7 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - 2026-11-17: Host full-stack deployment on AWS EC2 (Ubuntu 24.04) using Docker Compose (`db` Postgres 16, `backend`, `frontend` built on Node 22 with empty `VITE_API_BASE_URL` for same-origin proxy, `caddy` v2) and `<EC2-IP>.sslip.io` for zero-DNS-purchase automatic Let's Encrypt HTTPS, eliminating CORS friction. (Anton + Antigravity CLI)
 - 2026-11-18: Form input UX polish: replaced default OS `<select>` dropdown styling with `appearance-none`, custom `ChevronDown`, `shrink-0 min-w-[76px]` and added `min-w-0` to flex inputs across `ParcelForm.tsx` and `CarForm.tsx` so currencies (EUR, USD, PLN, GBP, UAH) and units (см³, кВт⋅год, рік) fit cleanly without text truncation. (Anna + Gemini)
 - 2026-11-18: Added quick currency switcher pills (`[EUR] [USD] [UAH] [PLN] [GBP]`) and currency symbols (`€ EUR`, `$ USD`, etc.) in price inputs, and replaced static tooltip on "Хто відправник" with an interactive expandable explanation card for July 2027 rules (Law 5025-IX / 5026-IX). (Anna + Gemini)
+- 2026-11-18: Mobile responsive navigation polish: split Navbar on mobile (`< md`) into a lean top bar (logo + actions) and a dedicated full-width segmented tab row (`Калькулятор` / `Історія`) below it; added `overflow-x-hidden` and `max-w-full` on root containers (`html, body`, `App.tsx`, `RatesBar.tsx`) to eliminate horizontal scrolling (swiping bug) on narrow viewports. (Anna + Gemini)
 
 - 2026-11-18: **Auto-deploy via GitHub Actions on push to the `deploy` branch** (SSH to EC2 + docker compose), not on push
   to `main`. Reason: the team merges to `main` many times a day; a separate `deploy` branch makes releases deliberate,
@@ -623,6 +624,18 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **Decisions & why:** none (releasing to production is `git push origin main:deploy`).
 - **How to verify / run:** `curl -s "https://api.github.com/repos/voskalo/PidKlyuch/actions/runs?branch=deploy&per_page=1"` and `curl -s https://16.170.212.120.sslip.io/api/health`.
 - **Not done / known problems / next steps:** Local AWS CLI SSO/login session for `main-aws` expired (`aws login` if needed for future EC2 CLI queries; does not affect GitHub Actions SSH auto-deploy).
+
+### 2026-11-18 17:05: Fix mobile horizontal viewport overflow & responsive navigation
+- **Who:** Anna Kravchenko via Antigravity (Gemini 3.8 Flash)
+- **Area:** frontend
+- **What was done:** Resolved mobile horizontal scroll bug (having to swipe left/right on phones):
+  1. **Responsive Navbar Architecture:** Split the navbar on mobile screens (`< md`) so the top row retains the logo and compact action buttons (`Донат ЗСУ`, `Увійти`/user profile), while the main navigation tabs (`Калькулятор`, `Історія`) are rendered as a clean, thumb-friendly full-width segmented control directly below it. On desktop (`md:`), the tabs remain centered in a single sleek header line.
+  2. **Viewport Containment:** Added `overflow-x-hidden max-w-full` across `index.css` (`html, body`), `App.tsx` container, and `RatesBar.tsx` to strictly prevent any horizontal stretching.
+  3. **Tightened Spacing:** Adjusted container horizontal padding on mobile (`px-3` on mobile vs `px-6` on desktop) for seamless edge-to-edge breathing room.
+- **Files touched:** `frontend/src/components/Navbar.tsx`, `frontend/src/components/RatesBar.tsx`, `frontend/src/App.tsx`, `frontend/src/index.css`, `AGENTS.md`
+- **Decisions & why:** Moving mobile tabs into their own full-width row prevents 4+ flex elements from fighting for 360px of screen space, eliminating horizontal overflow while keeping navigation one tap away.
+- **How to verify / run:** `cd frontend && npm run build` (0 errors); open Chrome DevTools in device emulation mode (iPhone SE 375px / Android 360px): page width is exactly 100vw with zero horizontal swipe or scrollbar.
+- **Not done / known problems / next steps:** Ready to commit & push to `main` (and `deploy` branch if ready to auto-deploy to EC2).
 
 ---
 

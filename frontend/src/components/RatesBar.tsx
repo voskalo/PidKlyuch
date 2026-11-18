@@ -30,10 +30,10 @@ export const RatesBar: React.FC = () => {
   }
 
   return (
-    <div className="bg-slate-900 text-slate-200 text-xs py-2 px-4 border-b border-slate-800">
-      <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <TrendingUp className="w-4 h-4 text-emerald-400 shrink-0" />
+    <div className="bg-slate-900 text-slate-200 text-xs py-2 px-3 sm:px-4 border-b border-slate-800 w-full overflow-x-hidden">
+      <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <TrendingUp className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
           <span className="font-medium text-slate-300">
             {rates?.source === 'nbu' ? 'Офіційні курси НБУ' : 'Резервні курси'}
           </span>
@@ -41,35 +41,35 @@ export const RatesBar: React.FC = () => {
             <span className="text-slate-400">({rates.date})</span>
           )}
           {rates?.source === 'fallback' && (
-            <span className="inline-flex items-center gap-1 text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded text-[11px]">
+            <span className="inline-flex items-center gap-1 text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded text-[10px]">
               <AlertTriangle className="w-3 h-3" />
               офлайн-режим
             </span>
           )}
         </div>
 
-        <div className="flex items-center flex-wrap gap-4">
+        <div className="flex items-center flex-wrap gap-x-3 gap-y-1.5 text-[11px] sm:text-xs">
           {rates?.uah_per_unit && (
             <>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1 whitespace-nowrap">
                 <span className="text-slate-400">1 EUR =</span>
                 <span className="font-semibold text-white">
                   {parseFloat(rates.uah_per_unit.EUR || '0').toFixed(2)} ₴
                 </span>
               </div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1 whitespace-nowrap">
                 <span className="text-slate-400">1 USD =</span>
                 <span className="font-semibold text-white">
                   {parseFloat(rates.uah_per_unit.USD || '0').toFixed(2)} ₴
                 </span>
               </div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1 whitespace-nowrap">
                 <span className="text-slate-400">1 PLN =</span>
                 <span className="font-semibold text-white">
                   {parseFloat(rates.uah_per_unit.PLN || '0').toFixed(2)} ₴
                 </span>
               </div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1 whitespace-nowrap">
                 <span className="text-slate-400">1 GBP =</span>
                 <span className="font-semibold text-white">
                   {parseFloat(rates.uah_per_unit.GBP || '0').toFixed(2)} ₴
@@ -84,7 +84,7 @@ export const RatesBar: React.FC = () => {
             title="Оновити курси"
             className="text-slate-400 hover:text-white transition-colors p-1 rounded hover:bg-slate-800 disabled:opacity-50"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>

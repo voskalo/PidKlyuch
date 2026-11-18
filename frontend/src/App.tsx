@@ -55,7 +55,7 @@ const MainApp: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans">
+    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans w-full overflow-x-hidden max-w-full">
       {/* Top live currency rates ticker */}
       <RatesBar />
 
@@ -72,7 +72,7 @@ const MainApp: React.FC = () => {
       />
 
       {/* Main Content */}
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8">
+      <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 py-6 sm:py-8 overflow-x-hidden">
         {/* Error Toast */}
         {errorToast && (
           <div className="mb-6 p-4 rounded-2xl bg-red-50 border border-red-200 text-red-700 flex items-center justify-between text-sm shadow-sm animate-in fade-in">
