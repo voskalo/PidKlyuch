@@ -637,6 +637,15 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **How to verify / run:** `cd frontend && npm run build` (0 errors); open Chrome DevTools in device emulation mode (iPhone SE 375px / Android 360px): page width is exactly 100vw with zero horizontal swipe or scrollbar.
 - **Not done / known problems / next steps:** Ready to commit & push to `main` (and `deploy` branch if ready to auto-deploy to EC2).
 
+### 2026-11-18 17:15: Clean input UI: remove top currency pills, keep only right dropdown
+- **Who:** Anna Kravchenko via Antigravity (Gemini 3.8 Flash)
+- **Area:** frontend
+- **What was done:** Cleaned up the price input UI in `ParcelForm.tsx` and `CarForm.tsx` per user feedback: removed the top row of currency pills (`[EUR] [USD] [UAH] [PLN] [GBP]`) from above the price label, keeping only the high-contrast currency selector (`[ 200 | ₴ UAH v ]`) on the right side of the input field.
+- **Files touched:** `frontend/src/components/ParcelForm.tsx`, `frontend/src/components/CarForm.tsx`, `AGENTS.md`
+- **Decisions & why:** Streamlined form layout by removing redundant buttons above the input while preserving the clean, styled dropdown with currency symbols (`€ EUR`, `₴ UAH`, etc.) directly on the right edge of the input.
+- **How to verify / run:** `cd frontend && npm run build` (0 errors); inspect parcel and car forms: price inputs have clean labels without top pills, with currency selector on the right.
+- **Not done / known problems / next steps:** Push `main` and deploy to EC2 (`git push origin main:deploy`).
+
 ---
 
 ## 13. Domain notes: Ukrainian customs (VERIFIED & LOCKED 2026-11-17)

@@ -149,26 +149,11 @@ export const CarForm: React.FC<CarFormProps> = ({ onCalculated, onError }) => {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Car price */}
         <div>
-          <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
+          <div className="flex items-center justify-between mb-1.5">
             <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
               2. Вартість автомобіля *
             </label>
-            <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
-              {CURRENCY_OPTIONS.map((c) => (
-                <button
-                  key={c.code}
-                  type="button"
-                  onClick={() => setCurrency(c.code)}
-                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all ${
-                    currency === c.code
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-                  }`}
-                >
-                  {c.code}
-                </button>
-              ))}
-            </div>
+            <span className="text-[11px] text-slate-400">ціна купівлі</span>
           </div>
           <div className="flex rounded-xl shadow-sm border border-slate-300 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/30 focus-within:border-blue-500">
             <input
