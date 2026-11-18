@@ -1,7 +1,7 @@
 """SQLAlchemy engine, session factory and declarative base."""
 from collections.abc import Iterator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.core.config import get_settings
@@ -38,8 +38,30 @@ def get_db() -> Iterator[Session]:
         db.close()
 
 
+def _migrate_users_table() -> None:
+    """Safely add OAuth columns on existing PostgreSQL / SQLite user tables."""
+    inspector = inspect(engine)
+    if not inspector.has_table("users"):
+        return
+    existing_cols = {col["name"] for col in inspector.get_columns("users")}
+    with engine.begin() as conn:
+        if engine.dialect.name == "postgresql":
+            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS google_sub VARCHAR(255)"))
+            conn.execute(
+                text("ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(32) DEFAULT 'local'")
+            )
+            conn.execute(text("ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_users_google_sub ON users (google_sub)"))
+        else:
+            if "google_sub" not in existing_cols:
+                conn.execute(text("ALTER TABLE users ADD COLUMN google_sub VARCHAR(255)"))
+            if "auth_provider" not in existing_cols:
+                conn.execute(text("ALTER TABLE users ADD COLUMN auth_provider VARCHAR(32) DEFAULT 'local'"))
+
+
 def init_db() -> None:
-    """Create tables. Good enough for the prototype (no migrations yet)."""
+    """Create tables and apply safe additive migrations for existing DBs."""
     from app import models  # noqa: F401  (registers models on Base.metadata)
 
     Base.metadata.create_all(bind=engine)
+    _migrate_users_table()

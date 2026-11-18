@@ -1,6 +1,95 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { X, Mail, Lock, User as UserIcon, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+
+const GOOGLE_CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID || '').trim();
+const GOOGLE_GSI_SRC = 'https://accounts.google.com/gsi/client';
+
+interface GoogleCredentialResponse {
+  credential?: string;
+}
+
+interface GoogleAccountsId {
+  initialize: (config: {
+    client_id: string;
+    callback: (response: GoogleCredentialResponse) => void;
+    auto_select?: boolean;
+  }) => void;
+  renderButton: (
+    parent: HTMLElement,
+    options: {
+      theme?: 'outline' | 'filled_blue' | 'filled_black';
+      size?: 'large' | 'medium' | 'small';
+      text?: 'signin_with' | 'signup_with' | 'continue_with' | 'signin';
+      shape?: 'rectangular' | 'pill' | 'circle' | 'square';
+      width?: number;
+      locale?: string;
+    },
+  ) => void;
+}
+
+interface GoogleWindow extends Window {
+  google?: {
+    accounts?: {
+      id?: GoogleAccountsId;
+    };
+  };
+}
+
+let gsiLoadPromise: Promise<GoogleAccountsId> | null = null;
+
+function loadGoogleGsi(): Promise<GoogleAccountsId> {
+  const win = window as GoogleWindow;
+  if (win.google?.accounts?.id) {
+    return Promise.resolve(win.google.accounts.id);
+  }
+  if (gsiLoadPromise) {
+    return gsiLoadPromise;
+  }
+
+  gsiLoadPromise = new Promise<GoogleAccountsId>((resolve, reject) => {
+    const resolveIfReady = () => {
+      if (win.google?.accounts?.id) {
+        resolve(win.google.accounts.id);
+      } else {
+        gsiLoadPromise = null;
+        reject(new Error('Google Identity Services unavailable'));
+      }
+    };
+
+    const existing = document.getElementById('google-gsi-client') as HTMLScriptElement | null;
+    if (existing) {
+      existing.addEventListener('load', resolveIfReady, { once: true });
+      existing.addEventListener(
+        'error',
+        () => {
+          gsiLoadPromise = null;
+          reject(new Error('Failed to load Google Identity Services'));
+        },
+        { once: true },
+      );
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.id = 'google-gsi-client';
+    script.src = GOOGLE_GSI_SRC;
+    script.async = true;
+    script.defer = true;
+    script.addEventListener('load', resolveIfReady, { once: true });
+    script.addEventListener(
+      'error',
+      () => {
+        gsiLoadPromise = null;
+        reject(new Error('Failed to load Google Identity Services'));
+      },
+      { once: true },
+    );
+    document.head.appendChild(script);
+  });
+
+  return gsiLoadPromise;
+}
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -19,8 +108,87 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [googleReady, setGoogleReady] = useState(false);
+  const [googleFailed, setGoogleFailed] = useState(false);
 
-  const { signin, signup } = useAuth();
+  const googleButtonRef = useRef<HTMLDivElement | null>(null);
+  const { signin, signup, googleLogin } = useAuth();
+
+  const googleLoginRef = useRef(googleLogin);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    googleLoginRef.current = googleLogin;
+    onCloseRef.current = onClose;
+  }, [googleLogin, onClose]);
+
+  useEffect(() => {
+    if (isOpen) {
+      setMode(initialMode);
+      setError(null);
+    }
+  }, [isOpen, initialMode]);
+
+  useEffect(() => {
+    if (!isOpen || !GOOGLE_CLIENT_ID) {
+      return;
+    }
+
+    let cancelled = false;
+
+    loadGoogleGsi()
+      .then((gsi) => {
+        if (cancelled || !googleButtonRef.current) {
+          return;
+        }
+        setGoogleFailed(false);
+        gsi.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: async (response) => {
+            if (!response.credential) {
+              setError('Не вдалося отримати дані облікового запису Google');
+              return;
+            }
+            try {
+              setError(null);
+              setLoading(true);
+              await googleLoginRef.current(response.credential);
+              onCloseRef.current();
+            } catch (err: unknown) {
+              if (err instanceof Error) {
+                setError(err.message);
+              } else {
+                setError('Не вдалося увійти через Google');
+              }
+            } finally {
+              setLoading(false);
+            }
+          },
+        });
+
+        const container = googleButtonRef.current;
+        container.innerHTML = '';
+        const buttonWidth = Math.min(360, Math.max(220, container.offsetWidth || 320));
+        gsi.renderButton(container, {
+          theme: 'outline',
+          size: 'large',
+          text: mode === 'signin' ? 'signin_with' : 'signup_with',
+          shape: 'rectangular',
+          width: buttonWidth,
+          locale: 'uk',
+        });
+        setGoogleReady(true);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setGoogleFailed(true);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, mode]);
 
   if (!isOpen) return null;
 
@@ -121,6 +289,32 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <div className="flex items-start gap-2.5 p-3 rounded-xl bg-red-50 text-red-700 text-xs border border-red-200/80">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-500" />
               <span>{error}</span>
+            </div>
+          )}
+
+          {GOOGLE_CLIENT_ID && !googleFailed && (
+            <div className="space-y-3">
+              <div className="flex flex-col items-center justify-center min-h-[44px]">
+                {!googleReady && (
+                  <div className="w-full h-[40px] rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center gap-2 text-xs font-medium text-slate-500">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Увійти через Google...</span>
+                  </div>
+                )}
+                <div
+                  ref={googleButtonRef}
+                  aria-label="Увійти через Google"
+                  className="w-full flex justify-center"
+                />
+              </div>
+
+              <div className="relative flex items-center">
+                <div className="flex-grow border-t border-slate-200" />
+                <span className="shrink-0 mx-3 text-[11px] font-medium uppercase tracking-wider text-slate-400">
+                  або
+                </span>
+                <div className="flex-grow border-t border-slate-200" />
+              </div>
             </div>
           )}
 

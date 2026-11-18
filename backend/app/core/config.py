@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     nbu_api_url: str = "https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json"
     # PBKDF2 iterations for password hashing (lowered in tests for speed)
     password_hash_iterations: int = 390_000
+    google_client_id: str = ""
+
+    @property
+    def GOOGLE_CLIENT_ID(self) -> str:
+        return self.google_client_id
 
     @property
     def cors_origin_list(self) -> list[str]:

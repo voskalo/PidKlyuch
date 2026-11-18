@@ -88,6 +88,15 @@ export const api = {
     return res;
   },
 
+  async googleAuth(credential: string): Promise<AuthResponse> {
+    const res = await request<AuthResponse>('/api/auth/google', {
+      method: 'POST',
+      body: JSON.stringify({ credential }),
+    });
+    setStoredToken(res.access_token);
+    return res;
+  },
+
   async getMe(): Promise<User> {
     return request<User>('/api/auth/me');
   },

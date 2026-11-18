@@ -142,8 +142,8 @@ Update the Status column above when a criterion is met.
 |---|---|---|
 | Backend language/framework | **Python 3.12+ / FastAPI** | `backend/`, entry point `app.main:app` (uvicorn on `$PORT`, default `8000`, `--proxy-headers`) |
 | ORM / Database | **SQLAlchemy 2.0**: SQLite locally, **PostgreSQL 16** in prod | Set via `DATABASE_URL` (`postgres:16-alpine` in Compose or AWS RDS Postgres); tables auto-created on startup via `init_db()` |
-| Auth method | **JWT bearer tokens** (PyJWT, HS256) | Passwords hashed with stdlib PBKDF2-SHA256 (`390,000` iterations) |
-| Tests | **pytest** + FastAPI `TestClient` | `cd backend && .venv/bin/pytest` (66 tests passing on `main`) |
+| Auth method | **JWT bearer tokens** (PyJWT, HS256) + optional **Google Sign-In** (GIS ID tokens) | Passwords hashed with stdlib PBKDF2-SHA256 (`390,000` iterations); Google ID tokens verified via `google-auth` (`POST /api/auth/google`) |
+| Tests | **pytest** + FastAPI `TestClient` | `cd backend && .venv/bin/pytest` (126 tests passing on `main`) |
 | Frontend framework | **React 19 / TypeScript / Vite 8 / Tailwind CSS v4** | `frontend/`, Lucide Icons, dev proxy `/api` → `127.0.0.1:8000`; built with Node 22 and served on `:80` behind Caddy in prod |
 | Hosting (backend & frontend) | **AWS EC2 (Ubuntu 24.04)** + **Docker Compose + Caddy v2** (automatic HTTPS) | Single HTTPS origin via `<EC2-IP>.sslip.io` (Let's Encrypt TLS); `/api/*` → `backend:8000`, `/*` → `frontend:80` |
 | Database (prod) | **PostgreSQL 16** (Docker Compose `db` or **AWS RDS for PostgreSQL**) | Set via `DATABASE_URL` (`?sslmode=require` if using RDS; never SQLite in prod) |
@@ -184,7 +184,7 @@ PidKlyuch/
 │   │   ├── models/            # SQLAlchemy ORM models: user.py (User), calculation.py (Calculation)
 │   │   ├── services/          # auth_service.py, rates_service.py, calculation_service.py, history_service.py
 │   │   └── customs/           # pure Python engine: tax_rates.json, rules.py, models.py, calculators.py
-│   └── tests/                 # pytest (122 tests). Run: cd backend && .venv/bin/pytest
+│   └── tests/                 # pytest (126 tests). Run: cd backend && .venv/bin/pytest
 │                              #   test_edge_cases.py = hostile/boundary input (bad tokens, NaN, decimals, thresholds
 │                              #   after conversion, car year/engine bounds, signup race, CORS) + 17.11 regressions
 ├── frontend/                  # React 19 + TypeScript + Vite SPA (owner: Anna)
@@ -246,6 +246,7 @@ Format: `NAME`: where it is used, example value (never a real secret), required 
 - `NBU_API_URL`: backend, NBU exchange-rate endpoint, default `https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json`. Optional.
 - `PASSWORD_HASH_ITERATIONS`: backend, PBKDF2 iterations, default `390000` (lowered only in tests). Optional.
 - `TAX_RATES_PATH`: backend, optional override path for `tax_rates.json` (default `app/customs/tax_rates.json`). Optional.
+- `GOOGLE_CLIENT_ID`: backend, Google OAuth 2.0 Web Client ID used as expected `audience` when verifying ID tokens in `POST /api/auth/google`. Optional (defaults to `""`).
 
 ### GitHub Actions secrets (repo Settings → Secrets → Actions; used by `.github/workflows/ci-cd.yml`)
 - `EC2_HOST` (`16.170.212.120`), `EC2_USER` (`ubuntu`): the SSH target. **Set 18.11.** Update `EC2_HOST` if the server IP changes.
@@ -255,8 +256,9 @@ Format: `NAME`: where it is used, example value (never a real secret), required 
 - `EC2_KNOWN_HOSTS`: pinned SSH host keys of the server (`ssh-keyscan 16.170.212.120`). **Set 18.11.** Re-set if the server is replaced.
 - Optional: `EC2_APP_DIR` (default `/home/ubuntu/PidKlyuch`), `DEPLOY_URL` (default `https://<EC2_HOST>.sslip.io`).
 
-### Frontend (`frontend/src/services/api.ts`, `infra/frontend.Dockerfile`)
+### Frontend (`frontend/src/services/api.ts`, `frontend/src/components/AuthModal.tsx`, `infra/frontend.Dockerfile`)
 - `VITE_API_BASE_URL`: frontend build-time env var, backend base URL (`https://api.pidklyuch.example.com` if hosted on a separate origin; leave empty `""` when behind Caddy on the same HTTPS origin because `api.ts` already prefixes `/api/...`). Optional locally (defaults to `""` with Vite `/api` proxy).
+- `VITE_GOOGLE_CLIENT_ID`: frontend build-time env var, Google OAuth 2.0 Web Client ID for Google Identity Services (`https://accounts.google.com/gsi/client`). When empty, the Google Sign-In button is hidden cleanly. Optional.
 
 ---
 
@@ -272,6 +274,7 @@ Money in responses is a **string with 2 decimals** (e.g. `"16.00"`), so no float
 | ✅ | GET | `/api/health` | – | liveness check for deploy & Docker healthcheck |
 | ✅ | POST | `/api/auth/signup` | – | create account → token |
 | ✅ | POST | `/api/auth/signin` | – | sign in → token |
+| ✅ | POST | `/api/auth/google` | – | verify Google ID token & sign in / auto-register → token |
 | ✅ | GET | `/api/auth/me` | required | current user |
 | ✅ | POST | `/api/calculate` | optional | calculate landed price; saved to history if signed in |
 | ✅ | POST | `/api/calculate/compare-rules` | – | parcel: current rules vs July 2027 rules |
@@ -297,6 +300,8 @@ max 100 chars, trimmed; blank → `null`; the email is trimmed and lowercased)
 `409` if the email is already registered.
 
 **POST /api/auth/signin**: body `{"email", "password"}` → `200`, same shape as signup. `401` on wrong credentials.
+
+**POST /api/auth/google**: body `{"credential": "<google_id_token>"}` → `200`, same `TokenOut` shape as signin/signup; links existing user by email (`google_sub`) or auto-registers an OAuth user (`auth_provider="google"`). `401` on invalid/unverified token.
 
 **GET /api/auth/me** → `{"id", "email", "name", "created_at"}`. `401` if missing/invalid/expired token.
 
@@ -558,6 +563,32 @@ Format: `YYYY-MM-DD: decision: reason (who)`
   (§11, Anton). Not tested end-to-end against the server yet for that reason. If the EC2 IP changes, update
   `EC2_HOST` and `EC2_KNOWN_HOSTS`.
 
+### 2026-11-18 11:24: Add Google OAuth ID-token sign-in endpoint (`POST /api/auth/google`)
+- **Who:** Anton Vertyporoh via Antigravity CLI (cross-area request in `backend/` with Liubomyr's auth pattern)
+- **Area:** backend
+- **What was done:** Added `google-auth==2.37.0` and `requests==2.32.3` to `backend/requirements.txt`; added `GOOGLE_CLIENT_ID` (`google_client_id`) to `Settings` and `backend/.env.example`; made `User.password_hash` nullable and added `google_sub` + `auth_provider` columns with safe idempotent `_migrate_users_table()` `ALTER TABLE` logic in `init_db()` (Postgres + SQLite); guarded `verify_password()` against empty/OAuth password hashes; added `GoogleAuthIn`, `InvalidGoogleToken`, `AuthService.authenticate_google()`, and `POST /api/auth/google` returning `TokenOut`; added 4 unit tests in `backend/tests/test_auth.py` mocking `id_token.verify_oauth2_token` (auto-registration, email account linking, invalid token 401, unverified email & audience forwarding).
+- **Files touched:** `backend/requirements.txt`, `backend/.env.example`, `backend/app/core/{config.py,database.py,security.py}`, `backend/app/models/user.py`, `backend/app/api/{auth.py,schemas_auth.py}`, `backend/app/services/auth_service.py`, `backend/tests/test_auth.py`, `AGENTS.md`
+- **Decisions & why:** OAuth-only users get `password_hash="!oauth"` and `auth_provider="google"`, keeping existing password auth rejected (`401`) while remaining compatible even with pre-existing SQLite tables; additive `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` in `init_db()` preserves production Postgres data without destructive migrations.
+- **How to verify / run:** `cd backend && .venv/bin/pytest -v` (`126 passed in 0.67s`).
+- **Not done / known problems / next steps:** Step 2 (frontend Google Sign-In UI) and Step 3–4 (infra, docs, live EC2 deploy).
+
+### 2026-11-18 11:26: Add Google Sign-In UI flow in frontend (`AuthModal`, `AuthContext`, `api.ts`)
+- **Who:** Anton Vertyporoh via Antigravity CLI (cross-area request in `frontend/` following Anna's React/TS patterns)
+- **Area:** frontend
+- **What was done:** Added `api.googleAuth(credential)` in `frontend/src/services/api.ts` posting `{ credential }` to `/api/auth/google` and persisting the returned JWT token; added `googleLogin(credential)` to `AuthContext`; updated `frontend/src/components/AuthModal.tsx` to load Google Identity Services (`https://accounts.google.com/gsi/client`) dynamically when `VITE_GOOGLE_CLIENT_ID` is set, render the localized (`uk`) Google button on both Sign In and Sign Up tabs, and hide the Google block cleanly without errors when `VITE_GOOGLE_CLIENT_ID` is empty.
+- **Files touched:** `frontend/src/services/api.ts`, `frontend/src/context/AuthContext.tsx`, `frontend/src/components/AuthModal.tsx`, `AGENTS.md`
+- **Decisions & why:** Dynamic script loader caches a singleton promise and measures modal container width dynamically (`Math.min(360, Math.max(220, offsetWidth))`) so the Google iframe never overflows narrow mobile viewports.
+- **How to verify / run:** `cd frontend && npm run lint && npm run build && VITE_GOOGLE_CLIENT_ID=test npm run build` (0 errors).
+- **Not done / known problems / next steps:** Step 3 (infra + docs + push) and Step 4 (live EC2 deploy).
+
+### 2026-11-18 11:27: Wire `GOOGLE_CLIENT_ID` & `VITE_GOOGLE_CLIENT_ID` in Docker Compose and update docs
+- **Who:** Anton Vertyporoh via Antigravity CLI
+- **Area:** infra / docs
+- **What was done:** Passed `VITE_GOOGLE_CLIENT_ID` build arg in `infra/frontend.Dockerfile` and `infra/docker-compose.yml`, passed `GOOGLE_CLIENT_ID` env var to `backend` in `infra/docker-compose.yml`, documented both variables in `infra/.env.example`, `README.md`, and `AGENTS.md` (§5, §6, §7, §8, §12).
+- **Files touched:** `infra/frontend.Dockerfile`, `infra/docker-compose.yml`, `infra/.env.example`, `README.md`, `AGENTS.md`
+- **Decisions & why:** none (consistent with existing `VITE_API_BASE_URL` build-arg pattern).
+- **How to verify / run:** `docker compose --env-file infra/.env.example -f infra/docker-compose.yml config`
+- **Not done / known problems / next steps:** Step 4 (live AWS EC2 deploy and HTTPS verification).
 
 ### 2026-11-18: Runbook §14.1 for finishing auto-deploy (for Anton's agent)
 - **Who:** Liubomyr Voskalo via Claude Code (Opus 5.5)

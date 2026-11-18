@@ -27,6 +27,7 @@ services:
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-10080}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:3000,https://localhost}
       NBU_API_URL: ${NBU_API_URL:-https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
     expose:
       - "8000"
     depends_on:
@@ -39,6 +40,7 @@ services:
       dockerfile: ../infra/frontend.Dockerfile
       args:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
     restart: unless-stopped
     expose:
       - "80"
