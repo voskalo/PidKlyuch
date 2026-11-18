@@ -121,6 +121,15 @@ jobs:
           echo "Server now at $($SUDO git rev-parse --short HEAD) (expected ${SHA:0:7})"
           [ "$($SUDO git rev-parse HEAD)" = "$SHA" ] || echo "note: deploy branch moved since this run started"
           $SUDO docker compose --env-file infra/.env -f infra/docker-compose.yml up -d --build
+          # Caddy reads infra/Caddyfile through a single-file bind mount: it does not watch the file, and after git
+          # replaces the file the running container still sees the old one. `up -d` does not recreate caddy for a
+          # config-only change, so recreate it whenever the config it runs differs from the repo (certs stay in the
+          # caddy_data volume; ~2 s restart).
+          if ! $SUDO docker compose --env-file infra/.env -f infra/docker-compose.yml exec -T caddy cat /etc/caddy/Caddyfile 2>/dev/null \
+              | cmp -s - infra/Caddyfile; then
+            echo "Caddyfile changed: recreating the caddy container"
+            $SUDO docker compose --env-file infra/.env -f infra/docker-compose.yml up -d --force-recreate --no-deps caddy
+          fi
           $SUDO docker image prune -f >/dev/null
           $SUDO docker compose --env-file infra/.env -f infra/docker-compose.yml ps
           REMOTE
@@ -132,7 +141,14 @@ jobs:
             api=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url/api/health" || true)
             web=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url/" || true)
             echo "attempt $i: /api/health=$api /=$web"
-            if [ "$api" = 200 ] && [ "$web" = 200 ]; then echo "Live: $url"; exit 0; fi
+            if [ "$api" = 200 ] && [ "$web" = 200 ]; then
+              # the Caddyfile in this commit must be the one serving (security headers present, no Server header)
+              h=$(curl -sI --max-time 10 "$url/" | tr -d '\r')
+              if echo "$h" | grep -qi '^x-frame-options: DENY' && ! echo "$h" | grep -qi '^server:'; then
+                echo "Live: $url (security headers OK)"; exit 0
+              fi
+              echo "attempt $i: site up but security headers missing (old Caddyfile?)"
+            fi
             sleep 10
           done
           echo "::error::Site did not become healthy at $url"; exit 1

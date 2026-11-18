@@ -961,6 +961,24 @@ Format: `YYYY-MM-DD: decision: reason (who)`
   `curl -sI https://16.170.212.120.sslip.io/` shows the headers and no `server:`.
 - **Not done / known problems / next steps:** the limiter is per process (fine for one uvicorn worker).
 
+
+### 2026-11-18 (late evening): Deploy now applies Caddyfile changes
+- **Who:** Liubomyr Voskalo via Claude Code (Opus 5.5)
+- **Area:** infra / CI (Anton's area)
+- **What was done:** After deploying "small bug fixes" (deploy run 44365105883) the backend and frontend fixes were live,
+  but the new Caddy headers were not: `infra/docker-compose.yml` mounts `./Caddyfile` as a single-file bind mount, Caddy
+  does not watch it, the container keeps the old file after git replaces it, and `docker compose up -d --build` does not
+  recreate caddy for a config-only change. So NO Caddyfile change had ever reached the server through auto-deploy.
+  `.github/workflows/ci-cd.yml` deploy step now compares the Caddyfile inside the running container with the repo and
+  runs `docker compose up -d --force-recreate --no-deps caddy` when they differ (certificates stay in `caddy_data`);
+  the "Verify the live site" step also requires `X-Frame-Options: DENY` and no `Server` header on `/`.
+- **Files touched:** `.github/workflows/ci-cd.yml`, `AGENTS.md` (§12).
+- **Decisions & why:** recreate only on a real difference (no restart on ordinary deploys); compare with the running
+  container's file, not with the previous commit, so the first run also fixes the current stale config.
+- **How to verify / run:** after a deploy, `curl -sI https://16.170.212.120.sslip.io/` shows `x-frame-options: DENY`,
+  `strict-transport-security` and no `server:` line.
+- **Not done / known problems / next steps:** none.
+
 ---
 
 ## 13. Domain notes: Ukrainian customs (RE-VERIFIED 2026-11-18 against the official law texts)
