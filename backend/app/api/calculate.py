@@ -2,7 +2,10 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_optional_user
-from app.api.schemas_calc import CalculationIn, CalculationOut, CompareRulesOut, ParcelIn, RatesOut
+from app.api.schemas_calc import (
+    CalculationIn, CalculationOut, CompareRulesOut, ExciseKindOut, ExciseKindsOut, ParcelIn, RatesOut,
+)
+from app.customs.rules import EXCISE_CURRENT
 from app.core.database import get_db
 from app.models import User
 from app.services.calculation_service import CalculationService
@@ -34,6 +37,22 @@ def compare_rules(body: ParcelIn, rates: RatesService = Depends(get_rates_servic
     return CompareRulesOut(
         current=service.calculate(body.model_copy(update={"rules": "current"})),
         july_2027=service.calculate(body.model_copy(update={"rules": "july_2027"})),
+    )
+
+
+@router.get("/excise/kinds", response_model=ExciseKindsOut)
+def excise_kinds() -> ExciseKindsOut:
+    """What the excise form needs to render: units, duty-free norms, which extra fields each kind needs."""
+    r = EXCISE_CURRENT
+    return ExciseKindsOut(
+        kinds=[
+            ExciseKindOut(key=k.key, label=k.label, group=k.group, unit=k.unit, allowance=k.allowance,
+                          allowance_note=k.allowance_note, abv_required=k.abv_required, abv_default=k.abv_default,
+                          abv_min=k.abv_min, abv_max=k.abv_max, weight_required=k.weight_required)
+            for k in r.kinds.values()
+        ],
+        allowance_groups_24h=list(r.allowance_groups_24h),
+        notes=list(r.notes),
     )
 
 

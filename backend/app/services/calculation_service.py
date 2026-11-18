@@ -1,10 +1,10 @@
 """Use case: API input -> EUR conversion -> customs engine -> response with UAH amounts."""
 from decimal import Decimal
 
-from app.api.schemas_calc import CalculationOut, CarIn, ParcelIn, TaxLineOut
-from app.customs.calculators import CarCalculator, ParcelCalculator
-from app.customs.models import Breakdown, CarInput, EngineType, Origin, ParcelInput, Sender, money
-from app.customs.rules import CAR_CURRENT, PARCEL_RULES, TAX_RATES
+from app.api.schemas_calc import CalculationOut, CarIn, ExciseIn, ParcelIn, TaxLineOut
+from app.customs.calculators import CarCalculator, ExciseCalculator, ParcelCalculator
+from app.customs.models import Breakdown, CarInput, EngineType, ExciseInput, Origin, ParcelInput, Sender, money
+from app.customs.rules import CAR_CURRENT, EXCISE_CURRENT, PARCEL_RULES, TAX_RATES
 from app.services.rates_service import RateTable
 
 
@@ -18,7 +18,7 @@ class CalculationService:
     def _uah(self, amount_eur: Decimal) -> Decimal:
         return money(self.rates.eur_to_uah(amount_eur))
 
-    def _breakdown(self, body: ParcelIn | CarIn) -> Breakdown:
+    def _breakdown(self, body: ParcelIn | CarIn | ExciseIn) -> Breakdown:
         if isinstance(body, ParcelIn):
             data = ParcelInput(
                 goods_value_eur=self._eur(body.item_price, body.currency),
@@ -26,6 +26,12 @@ class CalculationService:
                 sender=Sender(body.sender),
             )
             return ParcelCalculator(PARCEL_RULES[body.rules]).calculate(data)
+        if isinstance(body, ExciseIn):
+            data = ExciseInput(
+                kind=body.kind, quantity=body.quantity, price_eur=self._eur(body.item_price, body.currency),
+                abv=body.abv, weight_g=body.weight_g, under_24h=body.under_24h,
+            )
+            return ExciseCalculator(EXCISE_CURRENT, eur_uah=self.rates.uah_per_unit["EUR"]).calculate(data)
         data = CarInput(
             car_price_eur=self._eur(body.car_price, body.currency),
             shipping_eur=self._eur(body.shipping_price, body.currency),
@@ -38,7 +44,7 @@ class CalculationService:
         )
         return CarCalculator(CAR_CURRENT).calculate(data)
 
-    def calculate(self, body: ParcelIn | CarIn) -> CalculationOut:
+    def calculate(self, body: ParcelIn | CarIn | ExciseIn) -> CalculationOut:
         b = self._breakdown(body)
         notes = list(b.notes)
         if body.currency != "EUR":
