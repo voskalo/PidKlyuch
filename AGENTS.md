@@ -361,6 +361,7 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - 2026-11-16: Customs rules verification moved from Anton to Liubomyr (`tax_rates.json` + law watcher); Anton documented the locked spec and 10 test fixtures in `docs/customs-rules.md`. (Liubomyr + Anton)
 - 2026-11-17: Frontend stack = React 19 + TypeScript + Vite 8 + Tailwind CSS v4 + Lucide Icons, with dev proxy `/api` → `http://127.0.0.1:8000` and dedicated volunteer donation modal («Повернись живим», Фонд Сергія Притули, Monobank). (Anna + Gemini)
 - 2026-11-17: Host full-stack deployment on AWS EC2 (Ubuntu 24.04) using Docker Compose (`db` Postgres 16, `backend`, `frontend` built on Node 22 with empty `VITE_API_BASE_URL` for same-origin proxy, `caddy` v2) and `<EC2-IP>.sslip.io` for zero-DNS-purchase automatic Let's Encrypt HTTPS, eliminating CORS friction. (Anton + Antigravity CLI)
+- 2026-11-18: Form input UX polish: replaced default OS `<select>` dropdown styling with `appearance-none`, custom `ChevronDown`, `shrink-0 min-w-[76px]` and added `min-w-0` to flex inputs across `ParcelForm.tsx` and `CarForm.tsx` so currencies (EUR, USD, PLN, GBP, UAH) and units (см³, кВт⋅год, рік) fit cleanly without text truncation. (Anna + Gemini)
 
 ---
 
@@ -465,6 +466,15 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **Decisions & why:** Added 2 GB swapfile in user-data so Node/Vite production builds stay well within memory on `t3.micro`; full-stack serves frontend and `/api/*` under a single Caddy HTTPS origin (`https://16.170.212.120.sslip.io`).
 - **How to verify / run:** `curl -i https://16.170.212.120.sslip.io/healthz` (`200 OK`), `curl -i https://16.170.212.120.sslip.io/api/health` (`200 OK`), `curl -s https://16.170.212.120.sslip.io/api/rates` (`200 OK`, live NBU), `curl -s -o /dev/null -w "%{http_code}" https://16.170.212.120.sslip.io/api/docs` (`200`), `curl -s -o /dev/null -w "%{http_code}" https://16.170.212.120.sslip.io/` (`200`), and `POST /api/calculate` (`200`, `taxes_total_eur: "16.00"`).
 - **Not done / known problems / next steps:** PR #3 ready to merge `anton/infra-and-docs` into `main`; run Wednesday user testing sessions with `https://16.170.212.120.sslip.io` and compile `docs/report.pdf`.
+
+### 2026-11-18 11:00: Fix currency and unit selector truncation in input fields
+- **Who:** Anna Kravchenko via Antigravity (Gemini 3.8 Flash)
+- **Area:** frontend
+- **What was done:** Resolved UI clipping issue where currency selectors and badges were cut off to "EU" on certain screen widths and browsers. Added `min-w-0` to all number inputs to prevent flex items from crushing sibling containers; upgraded currency `<select>` with `appearance-none`, custom `ChevronDown` icon, `shrink-0 min-w-[76px]`, and `pl-3 pr-7`; centered and fixed unit badges (`см³`, `кВт⋅год`, `рік`, and shipping currency) with `shrink-0 min-w-[76px] justify-center` across `ParcelForm.tsx` and `CarForm.tsx`.
+- **Files touched:** `frontend/src/components/ParcelForm.tsx`, `frontend/src/components/CarForm.tsx`, `AGENTS.md`
+- **Decisions & why:** `appearance-none` removes unpredictable OS-native dropdown arrows that steal horizontal padding, while `shrink-0 min-w-[76px]` ensures 3-letter currency codes (EUR, USD, UAH, PLN, GBP) have dedicated comfortable spacing.
+- **How to verify / run:** `cd frontend && npm run build` (0 errors); run `npm run dev` and inspect parcel/car forms: currencies and units fit with ample breathing room.
+- **Not done / known problems / next steps:** None; ready for user testing sessions.
 
 ---
 

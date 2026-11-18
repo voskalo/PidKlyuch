@@ -19,6 +19,7 @@ import {
   Loader2,
   GitCompare,
   HelpCircle,
+  ChevronDown,
 } from 'lucide-react';
 
 interface ParcelFormProps {
@@ -161,20 +162,23 @@ export const ParcelForm: React.FC<ParcelFormProps> = ({
               value={itemPrice}
               onChange={(e) => setItemPrice(e.target.value)}
               placeholder="200"
-              className="flex-1 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:outline-none"
+              className="flex-1 min-w-0 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:outline-none"
             />
-            <select
-              value={currency}
-              onChange={(e) => setCurrency(e.target.value as Currency)}
-              aria-label="Валюта товару"
-              className="bg-slate-50 text-slate-700 text-xs font-bold px-3 border-l border-slate-200 focus:outline-none cursor-pointer"
-            >
-              {CURRENCIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
+            <div className="relative shrink-0 border-l border-slate-200 bg-slate-50 min-w-[76px]">
+              <select
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value as Currency)}
+                aria-label="Валюта товару"
+                className="w-full h-full appearance-none bg-transparent pl-3 pr-7 py-2.5 text-xs font-bold text-slate-700 focus:outline-none cursor-pointer hover:bg-slate-100 transition-colors"
+              >
+                {CURRENCIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
           </div>
           <p className="text-[11px] text-slate-500 mt-1">
             Для посилок мито розраховується від фактурної вартості товарів
@@ -197,9 +201,9 @@ export const ParcelForm: React.FC<ParcelFormProps> = ({
               value={shippingPrice}
               onChange={(e) => setShippingPrice(e.target.value)}
               placeholder="15"
-              className="flex-1 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:outline-none"
+              className="flex-1 min-w-0 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:outline-none"
             />
-            <div className="bg-slate-50 text-slate-600 text-xs font-bold px-3 flex items-center border-l border-slate-200">
+            <div className="shrink-0 min-w-[76px] bg-slate-50 text-slate-600 text-xs font-bold px-3 py-2.5 flex items-center justify-center border-l border-slate-200 select-none">
               {currency}
             </div>
           </div>
