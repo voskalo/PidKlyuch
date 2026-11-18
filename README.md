@@ -144,6 +144,7 @@ npm run dev
 - Production build: `npm run build` (outputs static assets to `frontend/dist/`)
 - In local development, `/api/*` requests are proxied automatically to `http://127.0.0.1:8000`.
 - In production, set `VITE_API_BASE_URL` in `.env` if the backend is hosted on a separate origin (leave empty when behind the same Caddy reverse-proxy origin).
+- Optionally set `VITE_GOOGLE_CLIENT_ID` (and matching `GOOGLE_CLIENT_ID` on the backend) to enable "Sign in with Google" via Google Identity Services.
 
 ---
 
@@ -203,7 +204,9 @@ JWT_SECRET=<generated-48-byte-secret>
 JWT_EXPIRE_MINUTES=10080
 CORS_ORIGINS=https://<EC2-PUBLIC-IP>.sslip.io
 NBU_API_URL=https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json
+GOOGLE_CLIENT_ID=<optional-google-oauth-client-id>
 VITE_API_BASE_URL=
+VITE_GOOGLE_CLIENT_ID=<optional-google-oauth-client-id>
 ```
 
 ### Step 4: Start the Production Stack & Verify HTTPS
