@@ -8,7 +8,7 @@ from datetime import date
 from decimal import Decimal
 
 from app.customs.models import (
-    Breakdown, CarInput, EngineType, ExciseInput, Origin, ParcelInput, Sender, TaxLine, money,
+    Breakdown, CarInput, EngineType, ExciseInput, Origin, ParcelInput, Sender, ShippedFrom, TaxLine, money,
 )
 from app.customs.rules import (
     CAR_CURRENT, EXCISE_CURRENT, PARCEL_CURRENT, CarRules, ExciseKind, ExciseRate, ExciseRules, ParcelRules,
@@ -72,10 +72,15 @@ class ParcelCalculator(CustomsCalculator):
         return result
 
 
+class ImportBanned(ValueError):
+    """The goods may not be imported at all (e.g. shipped from or through russia, Cabinet resolution 426)."""
+
+
 class CarCalculator(CustomsCalculator):
-    def __init__(self, rules: CarRules = CAR_CURRENT, current_year: int | None = None):
+    def __init__(self, rules: CarRules = CAR_CURRENT, current_year: int | None = None, today: date | None = None):
         self.rules = rules
-        self.current_year = current_year or date.today().year
+        self.today = today or (date(current_year, 12, 31) if current_year else date.today())
+        self.current_year = current_year or self.today.year
 
     def age_coefficient(self, manufacture_year: int) -> int:
         """Full calendar years from the year after manufacture to the current year (TC 215.3.5-1)."""
@@ -87,16 +92,39 @@ class CarCalculator(CustomsCalculator):
         made this year or later is new."""
         return data.is_new if data.is_new is not None else data.manufacture_year >= self.current_year
 
-    def _duty_rate(self, data: CarInput) -> tuple[Decimal, str]:
-        r = self.rules
-        if data.engine_type is EngineType.ELECTRIC:
-            return r.electric_duty_rate, "електромобіль"
-        if data.origin is Origin.EU:
-            return r.duty_rate_eu, "авто походженням з ЄС"
-        for exc in r.duty_exceptions:
+    def _normal_rate(self, data: CarInput) -> tuple[Decimal, str]:
+        """Normal ("пільгова", WTO / most-favoured-nation) rate of the car's tariff line."""
+        for exc in self.rules.duty_exceptions:
             if exc.matches(data.engine_type.value, data.engine_volume_cc, self.is_new(data)):
                 return exc.rate, exc.label
-        return r.duty_rate_other, "авто не з ЄС"
+        return self.rules.duty_rate_other, "звичайна ставка"
+
+    def _duty_rate(self, data: CarInput) -> tuple[Decimal, str, list[str]]:
+        """Duty rate by country of ORIGIN, corrected by country of DISPATCH (MK 36, 46, 280; free-trade agreements)."""
+        r = self.rules
+        if data.shipped_from is ShippedFrom.RUSSIA:
+            raise ImportBanned("import of goods shipped from or through russia is banned (Cabinet resolution 426)")
+        if data.engine_type is EngineType.ELECTRIC:
+            return r.electric_duty_rate, "електромобіль: 0% за будь-якого походження", []
+        if data.origin is Origin.UNPROVEN:
+            return r.duty_rate_full, "походження не підтверджено — повна ставка", [
+                "Походження не підтверджене — повна ставка мита (ст. 46 ч. 2 МКУ). Якщо протягом 1095 днів подати "
+                "документ про походження, різницю можна повернути (ст. 46 ч. 4 МКУ)."]
+        normal, normal_label = self._normal_rate(data)
+        if data.origin is Origin.OTHER:
+            return normal, normal_label, []
+        pref = r.preferential_origins[data.origin.value]
+        if data.shipped_from is ShippedFrom.OTHER:
+            return normal, f"{normal_label}; пільгу втрачено", [
+                f"Авто походженням з {pref.label}, але відправлене з іншої країни: пільга за угодою не діє "
+                "(правило прямого транспортування, документ про походження видає експортер країни-партнера) — звичайна ставка."]
+        if self.today < pref.valid_from:
+            return normal, normal_label, [f"Пільгова ставка для {pref.label} діє з {pref.valid_from:%d.%m.%Y} — до того звичайна ставка."]
+        notes = [f"Пільга: {pref.agreement}; потрібен документ про походження ({pref.proof}). Без нього — звичайна ставка."]
+        if pref.valid_to and self.today > pref.valid_to:
+            notes.append(f"Ставку для {pref.label} затверджено до {pref.valid_to:%d.%m.%Y}; на {self.today.year} рік її треба перевірити.")
+        rate = pref.rate_for(normal)
+        return rate, f"походження: {pref.label}", notes
 
     def _excise(self, data: CarInput) -> tuple[Decimal, str]:
         r = self.rules
@@ -127,7 +155,8 @@ class CarCalculator(CustomsCalculator):
         customs_value = price + shipping
         result = Breakdown(rules_key=r.key, goods_value_eur=price, shipping_eur=shipping, notes=list(r.notes))
 
-        duty_rate, duty_label = self._duty_rate(data)
+        duty_rate, duty_label, duty_notes = self._duty_rate(data)
+        result.notes[:0] = duty_notes
         duty = money(customs_value * duty_rate)
         result.lines.append(TaxLine(
             "duty", "Мито", duty, f"{_pct(duty_rate)} × {customs_value} ({duty_label}) = {duty} EUR",

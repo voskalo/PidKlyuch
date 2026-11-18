@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type {
   CarCalculateRequest,
   CalculationResult,
   Currency,
   EngineType,
   CarOrigin,
+  CarOriginOption,
+  ShippedFrom,
 } from '../types/api';
 import { api } from '../services/api';
 import { parseAmount } from '../utils/amount';
@@ -18,6 +20,7 @@ import {
   Calendar,
   Layers,
   ChevronDown,
+  Ban,
 } from 'lucide-react';
 
 interface CarFormProps {
@@ -38,6 +41,19 @@ const CURRENCY_OPTIONS: { code: Currency; symbol: string; label: string }[] = [
   { code: 'UAH', symbol: '₴', label: '₴ UAH' },
   { code: 'PLN', symbol: 'zł', label: 'zł PLN' },
   { code: 'GBP', symbol: '£', label: '£ GBP' },
+];
+
+// Used only if GET /api/car/origins fails; the backend list (with today's rates) is the source of truth.
+const FALLBACK_ORIGINS: CarOriginOption[] = [
+  { key: 'eu', label: 'ЄС', badge: '0%', hint: 'EUR.1 або декларація походження' },
+  { key: 'other', label: 'США, Японія, Корея, Китай та інші', badge: '10%', hint: 'звичайна ставка' },
+  { key: 'unproven', label: 'Походження не підтверджено', badge: '10%', hint: 'повна ставка (ст. 46 МКУ)' },
+];
+
+const SHIPPED_OPTIONS: { id: ShippedFrom; label: string; hint: string }[] = [
+  { id: 'origin', label: 'З країни походження', hint: 'напр. німецьке авто з Німеччини' },
+  { id: 'other', label: 'З іншої країни', hint: 'напр. німецьке авто з США' },
+  { id: 'russia', label: 'З рф або через рф', hint: 'ввезення заборонене' },
 ];
 
 const MIN_YEAR = 1950; // same as the API (manufacture_year ≥ 1950)
@@ -61,6 +77,12 @@ export const CarForm: React.FC<CarFormProps> = ({ onCalculated, onError }) => {
   const [batteryKwh, setBatteryKwh] = useState<string>('75');
   const [manufactureYear, setManufactureYear] = useState<string>('2014');
   const [origin, setOrigin] = useState<CarOrigin>('eu');
+  const [shippedFrom, setShippedFrom] = useState<ShippedFrom>('origin');
+  const [origins, setOrigins] = useState<CarOriginOption[]>(FALLBACK_ORIGINS);
+
+  useEffect(() => {
+    api.getCarOrigins().then(setOrigins).catch(() => {});
+  }, []);
   // null = the user has not touched the checkbox: then a car made this year counts as new (as in the API)
   const [isNewOverride, setIsNewOverride] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(false);
@@ -74,8 +96,14 @@ export const CarForm: React.FC<CarFormProps> = ({ onCalculated, onError }) => {
   // "New car" (never used) changes the result in two cases, and the checkbox is shown only then:
   //  - 5% duty instead of 10% for non-EU petrol/hybrid cars over 3000 cm³ (Customs Tariff 8703);
   //  - K_age = 1 for any new combustion-engine car, whatever its year (TC 215.3.5-1).
+  // A free-trade preference needs dispatch from the partner country; otherwise the normal rate applies.
+  const hasPreference = origin !== 'other' && origin !== 'unproven';
+  const effectiveOrigin: CarOrigin = hasPreference && shippedFrom === 'other' ? 'other' : origin;
   const newCutsDuty =
-    (engineType === 'petrol' || engineType === 'hybrid') && origin === 'other' && Number(engineVolumeCc) > 3000;
+    (engineType === 'petrol' || engineType === 'hybrid') &&
+    (effectiveOrigin === 'other' || effectiveOrigin === 'uae') &&
+    Number(engineVolumeCc) > 3000;
+  const selectedOrigin = origins.find((o) => o.key === origin);
   const newCutsKAge = engineType !== 'electric' && kAgeByYear > 1;
   const showIsNew = newCutsDuty || newCutsKAge;
   const isNew = isNewOverride ?? (!isNaN(yearNum) && yearNum >= currentYear);
@@ -83,6 +111,11 @@ export const CarForm: React.FC<CarFormProps> = ({ onCalculated, onError }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (shippedFrom === 'russia') {
+      onError('Ввезення авто з рф або транзитом через рф заборонене (постанова КМУ № 426)');
+      return;
+    }
+
     const price = parseAmount(carPrice, 'вартість авто', { required: true, positive: true });
     if (price.error !== null) {
       onError(price.error);
@@ -132,6 +165,7 @@ export const CarForm: React.FC<CarFormProps> = ({ onCalculated, onError }) => {
         battery_kwh: batteryNum,
         manufacture_year: yearNum,
         origin,
+        shipped_from: shippedFrom,
         ...(showIsNew ? { is_new: isNew } : {}),
       };
 
@@ -338,51 +372,95 @@ export const CarForm: React.FC<CarFormProps> = ({ onCalculated, onError }) => {
         </div>
       </div>
 
-      {/* 4. Origin */}
-      <div className="pt-2 border-t border-slate-100">
-        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-          6. Походження авто (сертифікат походження)
-        </label>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={() => setOrigin('eu')}
-            className={`p-3 rounded-xl border text-left transition-all ${
-              origin === 'eu'
-                ? 'border-blue-600 bg-blue-50/70 text-blue-900 font-semibold shadow-sm'
-                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold">Країни ЄС (сертифікат EUR.1)</span>
-              <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">
-                0% мито
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-500 mt-1">
-              Підтверджене походження з Євросоюзу за Угодою про асоціацію
+      {/* 6. Country of ORIGIN (where it was made) and 7. country of DISPATCH (where it is shipped from) */}
+      <div className="pt-2 border-t border-slate-100 space-y-4">
+        <div>
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+              6. Країна походження
+            </label>
+            <span className="text-[11px] text-slate-400 text-right">де вироблено авто, а не де куплено</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {origins.map((o) => {
+              const selected = o.key === origin;
+              const free = o.badge === '0%';
+              return (
+                <button
+                  key={o.key}
+                  type="button"
+                  onClick={() => setOrigin(o.key)}
+                  aria-pressed={selected}
+                  className={`p-2.5 sm:p-3 rounded-xl border text-left transition-all flex flex-col sm:flex-row items-start justify-between gap-1.5 sm:gap-2 min-h-[52px] ${
+                    selected
+                      ? 'border-blue-600 bg-blue-50/70 text-blue-900 font-semibold shadow-sm'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                  }`}
+                >
+                  <span className="text-xs font-bold leading-tight min-w-0 max-w-full break-words">{o.label}</span>
+                  <span
+                    className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                      free ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'
+                    }`}
+                  >
+                    {o.badge}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {selectedOrigin && (
+            <p className="text-[11px] text-slate-500 mt-1.5">
+              {hasPreference ? 'Потрібен документ: ' : ''}
+              {selectedOrigin.hint}
             </p>
-          </button>
+          )}
+        </div>
 
-          <button
-            type="button"
-            onClick={() => setOrigin('other')}
-            className={`p-3 rounded-xl border text-left transition-all ${
-              origin === 'other'
-                ? 'border-blue-600 bg-blue-50/70 text-blue-900 font-semibold shadow-sm'
-                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold">США, Азія, Канада, інше</span>
-              <span className="text-[10px] font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
-                10% мито
+        <div>
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+              7. Звідки відправляєте
+            </label>
+            <span className="text-[11px] text-slate-400 text-right">країна відправлення</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {SHIPPED_OPTIONS.map((opt) => {
+              const selected = opt.id === shippedFrom;
+              const banned = opt.id === 'russia';
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setShippedFrom(opt.id)}
+                  aria-pressed={selected}
+                  className={`p-2.5 sm:p-3 rounded-xl border text-left transition-all ${
+                    selected
+                      ? banned
+                        ? 'border-red-500 bg-red-50 text-red-900 font-semibold shadow-sm'
+                        : 'border-blue-600 bg-blue-50/70 text-blue-900 font-semibold shadow-sm'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="text-xs font-bold">{opt.label}</div>
+                  <div className="text-[11px] text-slate-500 mt-0.5">{opt.hint}</div>
+                </button>
+              );
+            })}
+          </div>
+          {shippedFrom === 'russia' ? (
+            <div className="mt-2 flex items-start gap-2.5 p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-800">
+              <Ban className="w-4 h-4 shrink-0 mt-0.5 text-red-500" />
+              <span>
+                Ввезення будь-яких товарів з рф або транзитом через рф заборонене (постанова КМУ № 426 від 09.04.2022) —
+                незалежно від країни походження.
               </span>
             </div>
-            <p className="text-[11px] text-slate-500 mt-1">
-              Стандартна ставка ввізного мита України (5% для нових бензинових авто понад 3000 см³)
+          ) : hasPreference && shippedFrom === 'other' ? (
+            <p className="text-[11px] text-amber-700 mt-1.5">
+              Пільга за угодою діє, лише якщо авто відправлене з країни-партнера, — інакше звичайна ставка
             </p>
-          </button>
+          ) : null}
         </div>
 
         {showIsNew && (

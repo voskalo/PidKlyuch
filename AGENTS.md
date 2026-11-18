@@ -143,7 +143,7 @@ Update the Status column above when a criterion is met.
 | Backend language/framework | **Python 3.12+ / FastAPI** | `backend/`, entry point `app.main:app` (uvicorn on `$PORT`, default `8000`, `--proxy-headers`) |
 | ORM / Database | **SQLAlchemy 2.0**: SQLite locally, **PostgreSQL 16** in prod | Set via `DATABASE_URL` (`postgres:16-alpine` in Compose or AWS RDS Postgres); tables auto-created on startup via `init_db()` |
 | Auth method | **JWT bearer tokens** (PyJWT, HS256) + optional **Google Sign-In** (GIS ID tokens) | Passwords hashed with stdlib PBKDF2-SHA256 (`390,000` iterations); Google ID tokens verified via `google-auth` (`POST /api/auth/google`) |
-| Tests | **pytest** + FastAPI `TestClient` | `cd backend && .venv/bin/pytest` (215 tests passing) |
+| Tests | **pytest** + FastAPI `TestClient` | `cd backend && .venv/bin/pytest` (250 tests passing) |
 | Frontend framework | **React 19 / TypeScript / Vite 8 / Tailwind CSS v4** | `frontend/`, Lucide Icons, dev proxy `/api` → `127.0.0.1:8000`; built with Node 22 and served on `:80` behind Caddy in prod |
 | Hosting (backend & frontend) | **AWS EC2 (Ubuntu 24.04)** + **Docker Compose + Caddy v2** (automatic HTTPS) | Single HTTPS origin via `<EC2-IP>.sslip.io` (Let's Encrypt TLS); `/api/*` → `backend:8000`, `/*` → `frontend:80` |
 | Database (prod) | **PostgreSQL 16** (Docker Compose `db` or **AWS RDS for PostgreSQL**) | Set via `DATABASE_URL` (`?sslmode=require` if using RDS; never SQLite in prod) |
@@ -184,7 +184,8 @@ PidKlyuch/
 │   │   ├── models/            # SQLAlchemy ORM models: user.py (User), calculation.py (Calculation)
 │   │   ├── services/          # auth_service.py, rates_service.py, calculation_service.py, history_service.py
 │   │   └── customs/           # pure Python engine: tax_rates.json, rules.py, models.py, calculators.py
-│   └── tests/                 # pytest (215 tests). Run: cd backend && .venv/bin/pytest
+│   └── tests/                 # pytest (250 tests). Run: cd backend && .venv/bin/pytest
+│                              #   test_origin.py = country of origin × country of dispatch for cars, bans, agreement dates
 │                              #   test_excise.py = excise goods in luggage, hand-checked cases + API validation
 │                              #   test_edge_cases.py = hostile/boundary input (bad tokens, NaN, decimals, thresholds
 │                              #   after conversion, car year/engine bounds, signup race, CORS) + 17.11 regressions
@@ -332,7 +333,12 @@ exactly (case-sensitive, no trimming); otherwise `422` with `detail[].loc[-1] ==
  "manufacture_year": 2014, "origin": "eu"}
 ```
 - `engine_type`: `petrol | diesel | hybrid | electric` (`engine_volume_cc` required for petrol/diesel/hybrid; `battery_kwh` required for electric)
-- `origin`: `eu | other` (`eu` = EUR.1 / origin declaration proved, 0% duty; EVs always have 0% duty)
+- `origin` (country of ORIGIN = where the car was made, MK 36): `eu | efta | uk | canada | israel | uae | other | unproven`.
+  Free-trade partners need a proof of origin (EUR.1 / origin declaration); `other` = WTO/MFN normal rate (10%, 5% for new
+  petrol/hybrid > 3000 cm³); `unproven` = full rate 10% (MK 46 p.2). EVs: 0% whatever the origin. See `GET /api/car/origins`.
+- `shipped_from` (country of DISPATCH, since 18.11): `origin` (default) | `other` (shipped from a third country: the
+  free-trade preference is lost → normal rate) | `russia` (→ 422 "import … shipped from or through russia is banned",
+  Cabinet resolution 426).
 - `is_new`: optional `true | false` (since 18.11). Means "never used" in the Customs Tariff sense; it matters for the 5% duty on new petrol/hybrid cars over 3000 cm³ AND sets K_age = 1 for any new combustion car (TC 215.3.5-1, since 18.11). If omitted, a car made in the current year or later counts as new.
 
 Response `200`:
@@ -375,6 +381,9 @@ unknown `delivery_type` gives `detail[0].type == "union_tag_invalid"`. Prices ac
 - Response: the usual `CalculationOut` (`rules: "current"`, `shipping_eur: "0.00"`); `lines` empty when the quantity is
   within the duty-free norm. Only the quantity above the norm is taxed, with its share of the price.
 - NOT for parcels: alcohol, tobacco and e-liquids to private persons are banned in post/express (MK 235); the notes say so.
+
+**GET /api/car/origins** → `[{"key", "label", "badge", "hint"}]` — origins for the car form with today's duty for a
+typical (10%) car, e.g. `{"key": "uae", "badge": "6,7%"}`. Rates and validity dates live in `car_rule_sets.current.preferential_origins`.
 
 **GET /api/excise/kinds** → `{"kinds": [{"key", "label", "group", "unit", "allowance", "allowance_note", "abv_required",
 "abv_default", "abv_min", "abv_max", "weight_required"}], "allowance_groups_24h": ["alcohol", "tobacco"], "notes": [...]}`.
@@ -467,6 +476,8 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - [x] Frontend: Ukrainian messages for 401/422/network errors and 2-decimal price handling (done 18.11 by Liubomyr, see §12).
 - [x] Frontend: "Нове авто" checkbox in `CarForm.tsx` that sends `is_new` (done 18.11 by Liubomyr, see §12).
 - [ ] In January 2027, re-check the EU-origin car duty rate for 2027 (source `dcfta_car_duty`) (Liubomyr).
+- [ ] Optional: excise goods in luggage — duty by origin (full column / EU preferences) is not modeled yet; Belarus/Iran import bans were not found in official texts — re-check (Liubomyr).
+- [ ] In January 2027, re-check the 2027 free-trade car rates (EU, UK, Canada, Israel, UAE) — `valid_to` is 31.12.2026 (Liubomyr).
 - [ ] Optional: excise goods — several kinds in one calculation, liqueurs 15–22% ("проміжні продукти", 12.23 грн/л), cider, EU-origin duty preferences (Liubomyr).
 - [ ] Optional: model range-extender EVs (8703 80 x0 90: 8% duty, flat €100 excise, TC 215.3.5-1) as their own engine type; today the UI only warns (Liubomyr).
 
@@ -867,6 +878,35 @@ Format: `YYYY-MM-DD: decision: reason (who)`
   calculation — 3 test calculations today in total, subtract them in the report); bundle has the new tab and texts; the
   iOS-zoom CSS rule is live.
 
+
+### 2026-11-18 (late night): Country of origin vs country of dispatch
+- **Who:** Liubomyr Voskalo via Claude Code (Opus 5.5)
+- **Area:** backend + frontend (cross-area: Anna's `CarForm.tsx`, `types/api.ts`, `services/api.ts`)
+- **What was done:** Checked both terms against MK 36, 46, 280, 374 p.7, Customs Tariff 8703 FTA rates for 2026 and
+  Cabinet resolutions 426 / 1147 (see §13). Result: for **cars** the duty depends on origin (and dispatch decides
+  whether a free-trade preference applies); for **parcels** neither changes the tax (flat 10%), only the russia bans;
+  for **excise goods** the 1147 origin ban (beer, vodka, filter cigarettes) and the 426 dispatch ban are now in the notes.
+  - Backend: `car_rule_sets.current.preferential_origins` (EU, EFTA, UK, Canada, Israel, UAE with dates; UAE as a
+    map of normal → reduced rate), `duty_rate_full`; `PreferentialOrigin` in `rules.py`; `Origin` (8 values) and new
+    `ShippedFrom` enums; `CarCalculator._duty_rate` by origin × dispatch with explanatory notes, `ImportBanned`;
+    `CarIn.origin` / `shipped_from` (+ 422 for russia); `GET /api/car/origins`; new watched sources MK 46, MK 280,
+    resolutions 426 and 1147 (watcher: 25 clauses `[ok]`). Removed `duty_rate_eu`. `tests/test_origin.py` (35 tests);
+    the oracle now covers all origins × dispatch.
+  - Frontend: car step "6. Країна походження" (8 cards from the API with today's rate badge, proof hint) and new
+    "7. Звідки відправляєте" (from origin / from another country / from or through russia — red warning, request
+    blocked); the "Нове авто" checkbox follows the effective origin.
+  - Mobile: origin cards clipped long words at ≤ 375 px → badge under the label on phones; full audit clean again.
+- **Files touched:** `backend/app/{customs/tax_rates.json,customs/rules.py,customs/models.py,customs/calculators.py,
+  api/schemas_calc.py,api/calculate.py,services/calculation_service.py}`, `backend/tests/{test_origin.py (new),
+  test_law_oracle.py}`, `frontend/src/{types/api.ts,services/api.ts,components/CarForm.tsx}`, `docs/customs-rules.md`,
+  `README.md`, `AGENTS.md` (§6, §8, §11, §12, §13).
+- **Decisions & why:** no origin field for parcels (it would change nothing — the law sets a flat 10%); the ban and
+  the explanation are in the result notes instead. Last known FTA rate kept after `valid_to` (with a note) rather
+  than falling back to 10%, because the schedules reached 0% and are re-issued yearly.
+- **How to verify / run:** `cd backend && .venv/bin/pytest` (250 passed); `.venv/bin/python scripts/check_law_updates.py`
+  (25 `[ok]`); `cd frontend && npm run build`; scratch Playwright: UI suite 82/82, mobile audit clean.
+- **Not done / known problems / next steps:** §11 (2027 FTA rates, excise duty by origin, Belarus/Iran).
+
 ---
 
 ## 13. Domain notes: Ukrainian customs (RE-VERIFIED 2026-11-18 against the official law texts)
@@ -881,7 +921,20 @@ All numbers live in `backend/app/customs/tax_rates.json` (verified against `zako
   - **> €150: 10% duty and 20% VAT on the FULL value**, not just the excess. Law 5026-IX item 19 sets MK 374 p.7's duty base to "їхня сумарна фактурна вартість"; Law 5025-IX item 6 changes TC 191.1.1 to "сумарна фактурна вартість". €200 parcel → €20 duty + €44 VAT = **€64.00**. *(Before 18.11 the code and spec wrongly kept the excess formula here; now fixed.)*
 
 **Cars (Tax Code 215.3.5-1, DCFTA):**
-- **Duty** (Customs Tariff 8703; customs value = car price + transport to the place of import, MK 58 p.10): **10%** for `origin = "other"`; **5% for NEW `petrol`/`hybrid` cars over 3000 cm³** (8703 24 10 00, 8703 40 10 80, 8703 60 10 80; "new" = optional `is_new`, else manufacture year ≥ current year); **0%** for `electric` (8703 80 x0 10); **0%** for `origin = "eu"` with EUR.1 / origin proof. That last rate is set per year: 0% for 01.01–31.12.2026 per State Customs Service letter 15/15-03-02/20836 of 22.12.2025, so re-check it in January 2027. UK/Canada/Israel/EFTA FTAs may also give 0%; this is not modeled.
+- **Duty by country of ORIGIN (where the car was made, MK 36), not the country of purchase** (customs value = car price
+  + transport to the place of import, MK 58 p.10). Columns (MK 280 p.5): free-trade (preferential) → normal "пільгова"
+  (WTO/MFN) → full "повна". 2026 rates for 8703: **EU, EFTA, Canada, Israel 0%; UK 0% from 01.04.2026; UAE 2/3 of
+  normal from 01.07.2026 (10% → 6.7%, 5% → 3.3%)** (State Customs Service letters 15/15-03-02/20836 of 22.12.2025 and
+  15/15-03-02/10066 of 18.06.2026; North Macedonia = normal; CIS/Georgia/Montenegro conditional exemptions not modeled).
+  Normal: **10%**, **5% for NEW petrol/hybrid > 3000 cm³** (8703 24 10 00, 8703 40 10 80, 8703 60 10 80; "new" =
+  `is_new`, else made this year). **Origin not established → full rate 10% for every line** (MK 46 p.2; refundable
+  if proof comes within 1095 days, 46 p.4). EVs (8703 80 x0 10): 0% in every column. Preferences need a proof of
+  origin AND **dispatch from the partner** (direct transport): an EU car shipped from the USA pays the normal rate.
+  Past an agreement's `valid_to` the last rate is kept with a "re-check" note.
+- **Country of DISPATCH (separate term):** goods shipped from or through russia are banned whatever their origin
+  (Cabinet resolution 426); russian-ORIGIN goods on the 1147 list (food, beer, vodka, filter cigarettes, trucks…, NOT
+  passenger cars 8703) are banned whatever the dispatch country (to 31.12.2026). Parcels: origin and dispatch do not
+  change the tax (flat 10%, MK 374 p.7) — only these bans.
 - **Excise:** `base × (cc / 1000) × K_age`, where `base` is `€50/€100` (`petrol` ≤3000 / >3000 cc) or `€75/€150` (`diesel` ≤3500 / >3500 cc), `hybrid` uses `petrol` rate (petrol hybrids only; a diesel hybrid 8703 50/70 = choose `diesel`), and `K_age = clamp(current_year − manufacture_year − 1, 1, 15)`, but **`K_age = 1` for a new (never used) car whatever its year** (TC 215.3.5-1 "для нових транспортних засобів … коефіцієнт дорівнює 1"). Electric (`8703 80 x0 10`) = `€1/kWh`. Not modeled: range-extender EVs (8703 80 x0 90): 8% duty + flat €100 excise; the UI warns about them.
 - **VAT:** **20%** on `(customs_value + duty + excise)` (EV VAT exemption expired 01.01.2026). Pension Fund levy, certification, and broker fees excluded.
 - **Pitch check (€10,000 car):** EU new 0.8L petrol or 40 kWh EV → **€2,048.00**; 2013 non-EU 2.0L petrol ($K_{age}=12$) or 2.0L diesel ($K_{age}=8$) → **€4,640.00** ✔.

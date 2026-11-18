@@ -3,7 +3,9 @@ from decimal import Decimal
 
 from app.api.schemas_calc import CalculationOut, CarIn, ExciseIn, ParcelIn, TaxLineOut
 from app.customs.calculators import CarCalculator, ExciseCalculator, ParcelCalculator
-from app.customs.models import Breakdown, CarInput, EngineType, ExciseInput, Origin, ParcelInput, Sender, money
+from app.customs.models import (
+    Breakdown, CarInput, EngineType, ExciseInput, Origin, ParcelInput, Sender, ShippedFrom, money,
+)
 from app.customs.rules import CAR_CURRENT, EXCISE_CURRENT, PARCEL_RULES, TAX_RATES
 from app.services.rates_service import RateTable
 
@@ -41,6 +43,7 @@ class CalculationService:
             engine_volume_cc=body.engine_volume_cc,
             battery_kwh=body.battery_kwh,
             is_new=body.is_new,
+            shipped_from=ShippedFrom(body.shipped_from),
         )
         return CarCalculator(CAR_CURRENT).calculate(data)
 

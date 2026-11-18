@@ -2,6 +2,7 @@ import type {
   AuthResponse,
   CalculateRequest,
   CalculationResult,
+  CarOriginOption,
   CompareRulesResult,
   ExciseKindsResponse,
   HistoryItem,
@@ -58,6 +59,7 @@ const VALUE_ERROR_UK: [string, string][] = [
   ['battery_kwh is required', 'Вкажіть ємність батареї електромобіля'],
   ['engine_volume_cc is required', "Вкажіть об'єм двигуна"],
   ['is a whole number of pieces', 'Кількість штук має бути цілим числом'],
+  ['shipped from or through russia is banned', 'Ввезення з рф або транзитом через рф заборонене (постанова КМУ № 426)'],
   ['weight_g is required', 'Вкажіть вагу нетто в грамах'],
   ['abv for', 'Міцність поза допустимими межами для цього напою'],
 ];
@@ -203,6 +205,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+  },
+
+  async getCarOrigins(): Promise<CarOriginOption[]> {
+    return request<CarOriginOption[]>('/api/car/origins');
   },
 
   async getExciseKinds(): Promise<ExciseKindsResponse> {
