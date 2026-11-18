@@ -28,8 +28,11 @@ This document is the single source of truth for all customs duty, excise, and VA
 |---|---|---|
 | **Customs Code of Ukraine (МКУ)** | Articles 234 & 374 p.7–8 (postal/express thresholds up to €150 and €10,000) | https://zakon.rada.gov.ua/laws/show/4495-17 |
 | **Tax Code of Ukraine (ПКУ)** | Articles 14.1.49-1 (distance sales VAT), 191, 196.1.17, 215.3.5-1 (car excise) | https://zakon.rada.gov.ua/laws/show/2755-17 |
-| **Laws № 5025-IX & № 5026-IX (15.10.2026)** | July 2027 parcel VAT reform (≤€150 VAT, €45 P2P exemption, >€150 unchanged) | https://zakon.rada.gov.ua/laws/show/2755-17 |
-| **Customs Tariff / EU-Ukraine DCFTA (Law № 2697-IX)** | 10% baseline passenger car duty; 0% preferential EU-origin duty (EUR.1) | https://zakon.rada.gov.ua/laws/show/2697-20 |
+| **Laws № 5025-IX & № 5026-IX (15.10.2026)** | July 2027 parcel reform: ≤€150 → VAT 20% on the full value, no duty; P2P gifts ≤€45 VAT-free (ПКУ 197.30); **>€150 → duty 10% and VAT 20% on the FULL value** (Law 5026-IX item 19 rewrites МКУ 374 p.7; Law 5025-IX item 6 rewrites ПКУ 191.1.1) | https://zakon.rada.gov.ua/laws/show/5025-20 , https://zakon.rada.gov.ua/laws/show/5026-20 |
+| **Customs Code Art. 368** | Invoice value of citizens' goods; freight/insurance are added only for unaccompanied baggage and cargo shipments, so **shipping is not counted for postal/express parcels** | https://zakon.rada.gov.ua/laws/show/4495-17 |
+| **Tax Code Art. 191.1.1** | Today's VAT base for parcels of individuals: the part of the invoice value above €150 **plus the duty** | https://zakon.rada.gov.ua/laws/show/2755-17 |
+| **Customs Tariff (Law № 2697-IX), heading 8703** | 10% passenger car duty; **5% for new petrol cars and new petrol hybrids > 3000 cm³** (8703 24 10 00, 8703 40 10 80, 8703 60 10 80); 0% for electric cars (8703 80 x0 10) | https://zakon.rada.gov.ua/laws/show/2697б-20 |
+| **EU-Ukraine Association Agreement (DCFTA)** | 0% duty for EU-origin cars in 2026 (State Customs Service letter № 15/15-03-02/20836 of 22.12.2025), only with EUR.1 / origin declaration; set per calendar year | https://www.qdpro.com.ua/goodinfo/8703239013 |
 | **State Budget Law 2026 (№ 4695-IX)** | Expiry of EV 0% VAT exemption as of 01.01.2026 (standard 20% VAT applies) | https://zakon.rada.gov.ua |
 | **State Customs Service of Ukraine** | Official guidance on postal/express parcel clearance & passenger car import | https://customs.gov.ua |
 | **State Tax Service of Ukraine** | Official VAT & excise clarifications | https://tax.gov.ua |
@@ -87,7 +90,7 @@ For a parcel with goods value $V_{\text{EUR}} = 200.00\text{ EUR}$:
 ### 2.1 Key Change vs. Today's Rules
 - **Marketplace / commercial parcels $\le €150.00$ (`sender = "marketplace"`):** The €150 VAT-free threshold is abolished; mandatory **20% VAT** applies from €0.01 (collected at checkout for distance sales), with **0% customs duty**.
 - **Private C2C parcels $\le €45.00$ (`sender = "private"`):** Non-commercial shipments sent from one private individual to another remain **tax-free** (`Duty = 0.00`, `VAT = 0.00`) up to **€45.00**; private parcels between `€45.01` and `€150.00` pay **20% VAT** on $V_{\text{EUR}}$.
-- **Parcels $> €150.00$:** Unchanged by Laws № 5025-IX / № 5026-IX — both **10% duty** and **20% VAT** continue to apply only to the **excess above €150.00**.
+- **Parcels $> €150.00$:** **Changed.** Law № 5026-IX (item 19) rewrites МКУ Art. 374 p.7: "Базою оподаткування ввізним митом для таких товарів є їхня сумарна фактурна вартість" (the duty base becomes the **whole** invoice value), and Law № 5025-IX (item 6) changes ПКУ 191.1.1 from "частина сумарної фактурної вартості" to "сумарна фактурна вартість" (VAT base = whole value + duty). A €200 parcel goes from **€16** today to **€64** in tax.
 
 ### 2.2 Formulas (July 2027 Rules)
 
@@ -102,15 +105,14 @@ $$\text{Total Tax}_{2027} = \text{VAT}_{2027}$$
 $$\text{Total Landed Price}_{2027} = V_{\text{EUR}} + S_{\text{EUR}} + \text{Total Tax}_{2027}$$
 
 #### Case C: $V_{\text{EUR}} > 150.00\text{ EUR}$ (up to $10,000\text{ EUR}$)
-$$\text{Excess}_{\text{EUR}} = V_{\text{EUR}} - 150.00$$
-$$\text{Duty}_{2027} = \text{round}_2(0.10 \times \text{Excess}_{\text{EUR}})$$
-$$\text{VAT}_{2027} = \text{round}_2\big(0.20 \times (\text{Excess}_{\text{EUR}} + \text{Duty}_{2027})\big)$$
+$$\text{Duty}_{2027} = \text{round}_2(0.10 \times V_{\text{EUR}})$$
+$$\text{VAT}_{2027} = \text{round}_2\big(0.20 \times (V_{\text{EUR}} + \text{Duty}_{2027})\big)$$
 $$\text{Total Tax}_{2027} = \text{Duty}_{2027} + \text{VAT}_{2027}$$
 $$\text{Total Landed Price}_{2027} = V_{\text{EUR}} + S_{\text{EUR}} + \text{Total Tax}_{2027}$$
 
 ### 2.3 Resolved Legal Edge Cases (Locked for Backend Unit Tests)
-1. **Shipping cost in sub-€150 VAT base:** Resolved — under Tax Code Art. 14.1.49-1 and Customs Code Art. 374 p.7, the taxable base for distance-sale parcel VAT is the intrinsic invoice value of goods ($V_{\text{EUR}}$), **excluding itemized shipping** ($S_{\text{EUR}}$).
-2. **Treatment of parcels $> €150$ and C2C gifts:** Resolved — Laws № 5025-IX / № 5026-IX preserve the €45.00 tax-free allowance exclusively for non-commercial private-to-private (`sender = "private"`) parcels and leave the excess-based formula for parcels $> €150.00$ unchanged (`€200.00` parcel stays `€16.00` tax, matching `backend/app/customs/calculators.py`). *(Note: Early un-enacted draft proposals taxed the entire value above €150 once exceeded, which is superseded by the enacted law text.)*
+1. **Shipping cost in the base:** Resolved — МКУ Art. 368 p.1 defines the invoice value of citizens' goods by receipts / online-shop confirmations, and p.2 adds freight and insurance **only** for unaccompanied baggage and cargo shipments. So for postal/express parcels the base ($V_{\text{EUR}}$) **excludes shipping** ($S_{\text{EUR}}$), both today and in 2027 (distance-sale VAT base = "сумарна фактурна вартість", ПКУ 191-1.3).
+2. **Treatment of parcels $> €150$ and C2C gifts:** Resolved (re-verified 18.11.2026 against the enacted texts of Laws № 5025-IX / № 5026-IX) — the €45.00 VAT exemption applies only to non-commercial gifts sent **without payment** from one private person to another (ПКУ 197.30, `sender = "private"`), and for parcels $> €150.00$ the **enacted** law taxes the **whole** value (see 2.1). *(Correction: an earlier version of this document said the excess-based formula stays; that contradicted item 19 of Law № 5026-IX.)*
 
 ---
 
@@ -164,6 +166,7 @@ Applies to passenger vehicles (UKTZED heading `8703`) imported into Ukraine.
 | `battery_capacity_kwh` ($B_{\text{kWh}}$) | `Decimal` | Traction battery capacity in kWh (required for `electric`) |
 | `production_year` ($Y_{\text{prod}}$) | `int` | Vehicle manufacturing year (used with `current_year` $Y_{\text{curr}}$, default `2026`, to compute $K_{\text{age}}$) |
 | `origin` | `enum` | `"other"` (standard 10% duty) or `"eu"` (0% preferential duty under DCFTA **only** with EUR.1 / origin declaration) |
+| `is_new` | `bool?` | Optional. Customs Tariff "new" (never used). If omitted, a car made in the current year or later counts as new. Only affects the 5% rate below |
 
 *(Note: Under ПКУ Art. 215.3.5-1, spark-ignition `hybrid` vehicles have no separate flat excise rate; they pay excise by their internal combustion engine displacement $E_{\text{cm3}}$ using the `petrol` base rate. Diesel hybrids should select `engine_type = "diesel"`.)*
 
@@ -171,6 +174,7 @@ Applies to passenger vehicles (UKTZED heading `8703`) imported into Ukraine.
 - **Internal combustion & hybrid vehicles (`petrol`, `diesel`, `hybrid`):**
   - If `origin == "other"` (standard rate, including EU-purchased non-EU-origin cars or cars without EUR.1):
     $$\text{Duty}_{\text{EUR}} = \text{round}_2(0.10 \times V_{\text{EUR}})$$
+    **Exception:** a **new** `petrol` or `hybrid` car with $E_{\text{cm3}} > 3000$ pays **5%** (tariff 8703 24 10 00, 8703 40 10 80, 8703 60 10 80). New diesels and all used cars stay at 10%.
   - If `origin == "eu"` (documented EU origin via EUR.1 / origin declaration under EU-Ukraine DCFTA):
     $$\text{Duty}_{\text{EUR}} = 0.00$$
 - **Electric vehicles (`electric`, UKTZED `8703 80 10 10` / `8703 90 10`):**
@@ -242,15 +246,15 @@ All 10 test cases below use a deterministic reference NBU rate fixture so unit t
 
 ### 5.1 Parcel Test Cases (Current Rules vs. July 2027 Rules, `sender = "marketplace"`)
 
-*(Note: Under July 2027 Laws № 5025-IX / № 5026-IX, parcels `> €150` are unchanged from today, while marketplace parcels `≤ €150` pay 20% VAT on `goods_value_eur` and private P2P gifts `≤ €45` remain exempt.)*
+*(Note: Under July 2027 Laws № 5025-IX / № 5026-IX, parcels `≤ €150` pay 20% VAT on `goods_value_eur` (private P2P gifts `≤ €45` exempt), and parcels `> €150` pay 10% duty and 20% VAT on the **full** value instead of only the excess.)*
 
 | ID | Description | Input (`item_price`, `shipping`, `currency`, `category`) | Current Rules (`duty`, `vat`, `total_tax`, `landed_eur`) | July 2027 Rules (`duty`, `vat`, `total_tax`, `landed_eur`) |
 |---|---|---|---|---|
 | **TC-P1** | Under €150 threshold | `120.00`, `15.00`, `EUR`, `electronics` | `0.00`, `0.00`, **`0.00`**, `135.00` (`6075.00 UAH`) | `0.00`, `24.00`, **`24.00`**, `159.00` (`7155.00 UAH`) |
 | **TC-P2** | Exact €150 boundary | `150.00`, `10.00`, `EUR`, `clothing` | `0.00`, `0.00`, **`0.00`**, `160.00` (`7200.00 UAH`) | `0.00`, `30.00`, **`30.00`**, `190.00` (`8550.00 UAH`) |
-| **TC-P3** | Pitch benchmark (€200) | `200.00`, `20.00`, `EUR`, `electronics` | `5.00`, `11.00`, **`16.00`**, `236.00` (`10620.00 UAH`) | `5.00`, `11.00`, **`16.00`**, `236.00` (`10620.00 UAH`) |
-| **TC-P4** | USD conversion (`$300` → `€276`) | `300.00`, `25.00`, `USD`, `clothing` | `12.60`, `27.72`, **`40.32`**, `339.32` (`15269.40 UAH`) | `12.60`, `27.72`, **`40.32`**, `339.32` (`15269.40 UAH`) |
-| **TC-P5** | High-value parcel (€1,000) | `1000.00`, `40.00`, `EUR`, `electronics` | `85.00`, `187.00`, **`272.00`**, `1312.00` (`59040.00 UAH`) | `85.00`, `187.00`, **`272.00`**, `1312.00` (`59040.00 UAH`) |
+| **TC-P3** | Pitch benchmark (€200) | `200.00`, `20.00`, `EUR`, `electronics` | `5.00`, `11.00`, **`16.00`**, `236.00` (`10620.00 UAH`) | `20.00`, `44.00`, **`64.00`**, `284.00` (`12780.00 UAH`) |
+| **TC-P4** | USD conversion (`$300` → `€276`) | `300.00`, `25.00`, `USD`, `clothing` | `12.60`, `27.72`, **`40.32`**, `339.32` (`15269.40 UAH`) | `27.60`, `60.72`, **`88.32`**, `387.32` (`17429.40 UAH`) |
+| **TC-P5** | High-value parcel (€1,000) | `1000.00`, `40.00`, `EUR`, `electronics` | `85.00`, `187.00`, **`272.00`**, `1312.00` (`59040.00 UAH`) | `100.00`, `220.00`, **`320.00`**, `1360.00` (`61200.00 UAH`) |
 
 ### 5.2 Passenger Car Test Cases (`current_year = 2026`, `origin = "other"`)
 
@@ -280,7 +284,7 @@ All 10 test cases below use a deterministic reference NBU rate fixture so unit t
         "item_value_eur": "120.00",
         "shipping_eur": "15.00",
         "current_rules": { "excess_eur": "0.00", "duty_eur": "0.00", "vat_eur": "0.00", "total_tax_eur": "0.00", "total_tax_uah": "0.00", "total_landed_eur": "135.00", "total_landed_uah": "6075.00" },
-        "july_2027_rules": { "excess_eur": "0.00", "duty_eur": "0.00", "vat_eur": "24.00", "total_tax_eur": "24.00", "total_tax_uah": "1080.00", "total_landed_eur": "159.00", "total_landed_uah": "7155.00" }
+        "july_2027_rules": { "duty_base_eur": "0.00", "duty_eur": "0.00", "vat_eur": "24.00", "total_tax_eur": "24.00", "total_tax_uah": "1080.00", "total_landed_eur": "159.00", "total_landed_uah": "7155.00" }
       }
     },
     {
@@ -290,7 +294,7 @@ All 10 test cases below use a deterministic reference NBU rate fixture so unit t
         "item_value_eur": "150.00",
         "shipping_eur": "10.00",
         "current_rules": { "excess_eur": "0.00", "duty_eur": "0.00", "vat_eur": "0.00", "total_tax_eur": "0.00", "total_tax_uah": "0.00", "total_landed_eur": "160.00", "total_landed_uah": "7200.00" },
-        "july_2027_rules": { "excess_eur": "0.00", "duty_eur": "0.00", "vat_eur": "30.00", "total_tax_eur": "30.00", "total_tax_uah": "1350.00", "total_landed_eur": "190.00", "total_landed_uah": "8550.00" }
+        "july_2027_rules": { "duty_base_eur": "0.00", "duty_eur": "0.00", "vat_eur": "30.00", "total_tax_eur": "30.00", "total_tax_uah": "1350.00", "total_landed_eur": "190.00", "total_landed_uah": "8550.00" }
       }
     },
     {
@@ -300,7 +304,7 @@ All 10 test cases below use a deterministic reference NBU rate fixture so unit t
         "item_value_eur": "200.00",
         "shipping_eur": "20.00",
         "current_rules": { "excess_eur": "50.00", "duty_eur": "5.00", "vat_eur": "11.00", "total_tax_eur": "16.00", "total_tax_uah": "720.00", "total_landed_eur": "236.00", "total_landed_uah": "10620.00" },
-        "july_2027_rules": { "excess_eur": "50.00", "duty_eur": "5.00", "vat_eur": "11.00", "total_tax_eur": "16.00", "total_tax_uah": "720.00", "total_landed_eur": "236.00", "total_landed_uah": "10620.00" }
+        "july_2027_rules": { "duty_base_eur": "200.00", "duty_eur": "20.00", "vat_eur": "44.00", "total_tax_eur": "64.00", "total_tax_uah": "2880.00", "total_landed_eur": "284.00", "total_landed_uah": "12780.00" }
       }
     },
     {
@@ -310,7 +314,7 @@ All 10 test cases below use a deterministic reference NBU rate fixture so unit t
         "item_value_eur": "276.00",
         "shipping_eur": "23.00",
         "current_rules": { "excess_eur": "126.00", "duty_eur": "12.60", "vat_eur": "27.72", "total_tax_eur": "40.32", "total_tax_uah": "1814.40", "total_landed_eur": "339.32", "total_landed_uah": "15269.40" },
-        "july_2027_rules": { "excess_eur": "126.00", "duty_eur": "12.60", "vat_eur": "27.72", "total_tax_eur": "40.32", "total_tax_uah": "1814.40", "total_landed_eur": "339.32", "total_landed_uah": "15269.40" }
+        "july_2027_rules": { "duty_base_eur": "276.00", "duty_eur": "27.60", "vat_eur": "60.72", "total_tax_eur": "88.32", "total_tax_uah": "3974.40", "total_landed_eur": "387.32", "total_landed_uah": "17429.40" }
       }
     },
     {
@@ -320,7 +324,7 @@ All 10 test cases below use a deterministic reference NBU rate fixture so unit t
         "item_value_eur": "1000.00",
         "shipping_eur": "40.00",
         "current_rules": { "excess_eur": "850.00", "duty_eur": "85.00", "vat_eur": "187.00", "total_tax_eur": "272.00", "total_tax_uah": "12240.00", "total_landed_eur": "1312.00", "total_landed_uah": "59040.00" },
-        "july_2027_rules": { "excess_eur": "850.00", "duty_eur": "85.00", "vat_eur": "187.00", "total_tax_eur": "272.00", "total_tax_uah": "12240.00", "total_landed_eur": "1312.00", "total_landed_uah": "59040.00" }
+        "july_2027_rules": { "duty_base_eur": "1000.00", "duty_eur": "100.00", "vat_eur": "220.00", "total_tax_eur": "320.00", "total_tax_uah": "14400.00", "total_landed_eur": "1360.00", "total_landed_uah": "61200.00" }
       }
     }
   ],

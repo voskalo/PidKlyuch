@@ -30,6 +30,9 @@ class ParcelRules:
     vat_on_low_value: bool  # July 2027: VAT on the whole value of parcels <= threshold (no duty)
     private_exempt_up_to_eur: Decimal | None  # July 2027: P2P non-commercial parcels up to this stay tax-free
     simplified_limit_eur: Decimal  # above this: full commercial customs declaration (CC art. 374 p.8)
+    # Base for duty and VAT on parcels above the threshold: "excess" (part above it; today, CC 374 p.7 + TC 191.1.1)
+    # or "full_value" (whole invoice value; July 2027, Law 5026-IX item 19 + Law 5025-IX item 6)
+    above_threshold_base: str = "excess"
     notes: tuple[str, ...] = ()
     sources: tuple[str, ...] = ()
 
@@ -42,6 +45,20 @@ class ExciseBase:
 
     def rate_for(self, cc: int) -> Decimal:
         return self.small if cc <= self.up_to_cc else self.large
+
+
+@dataclass(frozen=True)
+class DutyException:
+    """A reduced duty rate for some cars (Customs Tariff), e.g. 5% for new petrol cars over 3000 cm3."""
+    engine_types: tuple[str, ...]
+    only_new: bool
+    engine_cc_over: int
+    rate: Decimal
+    label: str
+
+    def matches(self, engine_type: str, engine_cc: int | None, is_new: bool) -> bool:
+        return (engine_type in self.engine_types and (is_new or not self.only_new)
+                and engine_cc is not None and engine_cc > self.engine_cc_over)
 
 
 @dataclass(frozen=True)
@@ -58,6 +75,7 @@ class CarRules:
     # K_age = full calendar years from the year AFTER manufacture to the current year, clamped
     age_coef_min: int
     age_coef_max: int
+    duty_exceptions: tuple[DutyException, ...] = ()  # apply to non-EU-origin, non-electric cars
     notes: tuple[str, ...] = ()
     sources: tuple[str, ...] = ()
 
@@ -71,6 +89,12 @@ class TaxRates:
     sources: dict[str, dict]
 
 
+def _base(value: str) -> str:
+    if value not in ("excess", "full_value"):
+        raise ValueError(f"above_threshold_base must be 'excess' or 'full_value', got {value!r}")
+    return value
+
+
 def _parcel(key: str, r: dict) -> ParcelRules:
     exempt = r.get("private_exempt_up_to_eur")
     return ParcelRules(
@@ -82,6 +106,7 @@ def _parcel(key: str, r: dict) -> ParcelRules:
         vat_on_low_value=bool(r["vat_on_low_value"]),
         private_exempt_up_to_eur=_d(exempt) if exempt is not None else None,
         simplified_limit_eur=_d(r["simplified_limit_eur"]),
+        above_threshold_base=_base(r.get("above_threshold_base", "excess")),
         notes=tuple(r.get("notes", [])),
         sources=tuple(r.get("sources", [])),
     )
@@ -106,6 +131,13 @@ def _car(key: str, r: dict) -> CarRules:
         electric_eur_per_kwh=_d(r["electric_eur_per_kwh"]),
         age_coef_min=int(r["age_coef_min"]),
         age_coef_max=int(r["age_coef_max"]),
+        duty_exceptions=tuple(
+            DutyException(
+                engine_types=tuple(e["engine_types"]), only_new=bool(e["only_new"]),
+                engine_cc_over=int(e["engine_cc_over"]), rate=_d(e["rate"]), label=e["label"],
+            )
+            for e in r.get("duty_exceptions", [])
+        ),
         notes=tuple(r.get("notes", [])),
         sources=tuple(r.get("sources", [])),
     )

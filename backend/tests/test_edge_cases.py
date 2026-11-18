@@ -9,7 +9,8 @@ from tests.test_calculate_api import CAR, PARCEL
 
 
 def signup(client, email="edge@example.com", **extra):
-    return client.post("/api/auth/signup", json={"email": email, "password": "secret123", **extra})
+    return client.post("/api/auth/signup", json={"email": email, "password": "secret123",
+                                                  "password_confirm": "secret123", **extra})
 
 
 def bearer(token):
@@ -112,13 +113,15 @@ def test_email_is_trimmed_and_case_insensitive(client):
 
 @pytest.mark.parametrize("password,status", [("1234567", 422), ("12345678", 201), ("x" * 128, 201), ("x" * 129, 422)])
 def test_password_length_bounds(client, password, status):
-    r = client.post("/api/auth/signup", json={"email": "len@example.com", "password": password})
+    r = client.post("/api/auth/signup", json={"email": "len@example.com", "password": password,
+                                                   "password_confirm": password})
     assert r.status_code == status
 
 
 def test_unicode_password_roundtrip(client):
     pw = "пароль🔑пароль"
-    assert client.post("/api/auth/signup", json={"email": "u@example.com", "password": pw}).status_code == 201
+    assert client.post("/api/auth/signup", json={"email": "u@example.com", "password": pw,
+                                                    "password_confirm": pw}).status_code == 201
     assert client.post("/api/auth/signin", json={"email": "u@example.com", "password": pw}).status_code == 200
 
 

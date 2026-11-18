@@ -40,15 +40,19 @@ class ParcelCalculator(CustomsCalculator):
             ))
 
         if goods > threshold:
-            # Customs Code art. 374 p.7: duty and VAT only on the part above the threshold
-            excess = goods - threshold
-            duty = money(excess * r.duty_rate)
-            vat = money((excess + duty) * r.vat_rate)
+            # Today (CC 374 p.7 + TC 191.1.1): duty on the part above the threshold, VAT on (that part + duty).
+            # July 2027 (Law 5026-IX item 19 + Law 5025-IX item 6): both on the FULL invoice value.
+            if r.above_threshold_base == "excess":
+                base, base_label = goods - threshold, f"({goods} − {threshold})"
+            else:
+                base, base_label = goods, f"{goods}"
+            duty = money(base * r.duty_rate)
+            vat = money((base + duty) * r.vat_rate)
             result.lines.append(TaxLine(
-                "duty", "Мито", duty, f"{_pct(r.duty_rate)} × ({goods} − {threshold}) = {duty} EUR",
+                "duty", "Мито", duty, f"{_pct(r.duty_rate)} × {base_label} = {duty} EUR",
             ))
             result.lines.append(TaxLine(
-                "vat", "ПДВ", vat, f"{_pct(r.vat_rate)} × ({money(excess)} + {duty}) = {vat} EUR",
+                "vat", "ПДВ", vat, f"{_pct(r.vat_rate)} × ({money(base)} + {duty}) = {vat} EUR",
             ))
         elif r.vat_on_low_value:
             exempt = r.private_exempt_up_to_eur
@@ -73,6 +77,22 @@ class CarCalculator(CustomsCalculator):
         """Full calendar years from the year after manufacture to the current year (TC 215.3.5-1)."""
         full_years = self.current_year - manufacture_year - 1
         return max(self.rules.age_coef_min, min(self.rules.age_coef_max, full_years))
+
+    def is_new(self, data: CarInput) -> bool:
+        """'New' as in the Customs Tariff (not used before). If the user did not say, assume a car
+        made this year or later is new."""
+        return data.is_new if data.is_new is not None else data.manufacture_year >= self.current_year
+
+    def _duty_rate(self, data: CarInput) -> tuple[Decimal, str]:
+        r = self.rules
+        if data.engine_type is EngineType.ELECTRIC:
+            return r.electric_duty_rate, "електромобіль"
+        if data.origin is Origin.EU:
+            return r.duty_rate_eu, "авто походженням з ЄС"
+        for exc in r.duty_exceptions:
+            if exc.matches(data.engine_type.value, data.engine_volume_cc, self.is_new(data)):
+                return exc.rate, exc.label
+        return r.duty_rate_other, "авто не з ЄС"
 
     def _excise(self, data: CarInput) -> tuple[Decimal, str]:
         r = self.rules
@@ -99,12 +119,7 @@ class CarCalculator(CustomsCalculator):
         customs_value = price + shipping
         result = Breakdown(rules_key=r.key, goods_value_eur=price, shipping_eur=shipping, notes=list(r.notes))
 
-        if data.engine_type is EngineType.ELECTRIC:
-            duty_rate, duty_label = r.electric_duty_rate, "електромобіль"
-        elif data.origin is Origin.EU:
-            duty_rate, duty_label = r.duty_rate_eu, "авто походженням з ЄС"
-        else:
-            duty_rate, duty_label = r.duty_rate_other, "авто не з ЄС"
+        duty_rate, duty_label = self._duty_rate(data)
         duty = money(customs_value * duty_rate)
         result.lines.append(TaxLine(
             "duty", "Мито", duty, f"{_pct(duty_rate)} × {customs_value} ({duty_label}) = {duty} EUR",

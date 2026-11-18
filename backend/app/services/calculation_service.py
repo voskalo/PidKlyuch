@@ -35,6 +35,7 @@ class CalculationService:
             origin=Origin(body.origin),
             engine_volume_cc=body.engine_volume_cc,
             battery_kwh=body.battery_kwh,
+            is_new=body.is_new,
         )
         return CarCalculator(CAR_CURRENT).calculate(data)
 

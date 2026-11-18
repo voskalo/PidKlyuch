@@ -25,6 +25,89 @@ export function removeStoredToken(): void {
   localStorage.removeItem(TOKEN_KEY);
 }
 
+// Backend error texts are English; users see Ukrainian.
+const DETAIL_UK: Record<string, string> = {
+  'Invalid email or password': 'Невірна електронна пошта або пароль',
+  'Email already registered': 'Ця пошта вже зареєстрована. Увійдіть в акаунт',
+  'Invalid Google token': 'Не вдалося увійти через Google. Спробуйте ще раз',
+  'Not authenticated': 'Сесія завершилася. Увійдіть в акаунт знову',
+  'Calculation not found': 'Розрахунок не знайдено (можливо, його вже видалено)',
+};
+
+const FIELD_UK: Record<string, string> = {
+  item_price: 'Вартість товару',
+  shipping_price: 'Вартість доставки',
+  car_price: 'Вартість авто',
+  engine_volume_cc: "Об'єм двигуна",
+  battery_kwh: 'Ємність батареї',
+  manufacture_year: 'Рік випуску',
+  email: 'Електронна пошта',
+  password: 'Пароль',
+  password_confirm: 'Повтор пароля',
+  name: "Ім'я",
+};
+
+// Messages raised by our own backend validators (pydantic prefixes them with "Value error, ").
+const VALUE_ERROR_UK: [string, string][] = [
+  ['Passwords do not match', 'Паролі не збігаються'],
+  ['battery_kwh is required', 'Вкажіть ємність батареї електромобіля'],
+  ['engine_volume_cc is required', "Вкажіть об'єм двигуна"],
+];
+
+interface ValidationErrorItem {
+  loc?: (string | number)[];
+  msg?: string;
+  type?: string;
+  ctx?: Record<string, unknown>;
+}
+
+function describeValidationError(err: ValidationErrorItem): string {
+  const known = VALUE_ERROR_UK.find(([en]) => err.msg?.includes(en));
+  if (known) return known[1];
+  const field = [...(err.loc ?? [])].reverse().find((p) => typeof p === 'string' && p in FIELD_UK) as
+    | string
+    | undefined;
+  const ctx = err.ctx ?? {};
+  let problem: string;
+  switch (err.type) {
+    case 'missing':
+      problem = "обов'язкове поле";
+      break;
+    case 'string_too_short':
+      problem = `щонайменше ${ctx.min_length} символів`;
+      break;
+    case 'string_too_long':
+      problem = `не більше ${ctx.max_length} символів`;
+      break;
+    case 'less_than_equal':
+      problem = `не більше ${ctx.le}`;
+      break;
+    case 'greater_than_equal':
+      problem = `не менше ${ctx.ge}`;
+      break;
+    case 'greater_than':
+      problem = `має бути більше ${ctx.gt}`;
+      break;
+    case 'decimal_max_places':
+      problem = 'не більше 2 знаків після коми';
+      break;
+    case 'value_error':
+      problem = field === 'email' ? 'некоректна адреса' : 'некоректне значення';
+      break;
+    default:
+      problem = 'некоректне значення';
+  }
+  return field ? `${FIELD_UK[field]}: ${problem}` : `Перевірте введені дані (${problem})`;
+}
+
+function errorMessage(detail: unknown): string | null {
+  if (typeof detail === 'string') return DETAIL_UK[detail] ?? detail;
+  if (Array.isArray(detail) && detail.length > 0) {
+    return [...new Set(detail.map((e: ValidationErrorItem) => describeValidationError(e)))].join('; ');
+  }
+  return null;
+}
+
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers || {});
   
@@ -37,10 +120,16 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${endpoint}`, {
+      ...options,
+      headers,
+    });
+  } catch {
+    // Offline, DNS failure, server down: fetch rejects with an English TypeError.
+    throw new Error("Немає з'єднання з сервером. Перевірте інтернет і спробуйте ще раз.");
+  }
 
   if (response.status === 401) {
     removeStoredToken();
@@ -54,15 +143,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
-    let message = 'Сталася помилка при зверненні до сервера';
-    if (data?.detail) {
-      if (typeof data.detail === 'string') {
-        message = data.detail;
-      } else if (Array.isArray(data.detail)) {
-        message = data.detail.map((err: { msg?: string }) => err.msg || JSON.stringify(err)).join(', ');
-      }
-    }
-    throw new Error(message);
+    throw new Error(errorMessage(data?.detail) ?? 'Сталася помилка при зверненні до сервера');
   }
 
   return data as T;
@@ -70,10 +151,10 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 
 export const api = {
   // Auth
-  async signup(email: string, password: string, name?: string): Promise<AuthResponse> {
+  async signup(email: string, password: string, passwordConfirm: string, name?: string): Promise<AuthResponse> {
     const res = await request<AuthResponse>('/api/auth/signup', {
       method: 'POST',
-      body: JSON.stringify({ email, password, name: name || undefined }),
+      body: JSON.stringify({ email, password, password_confirm: passwordConfirm, name: name || undefined }),
     });
     setStoredToken(res.access_token);
     return res;

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AuthProvider } from './context/AuthContext';
 import { Navbar } from './components/Navbar';
 import { RatesBar } from './components/RatesBar';
@@ -11,7 +11,14 @@ import { AuthModal } from './components/AuthModal';
 import { DonationModal } from './components/DonationModal';
 import { StatsModal } from './components/StatsModal';
 import { Footer } from './components/Footer';
-import type { CalculationResult, CompareRulesResult, DeliveryType } from './types/api';
+import type {
+  CalculateRequest,
+  CalculationResult,
+  CompareRulesResult,
+  DeliveryType,
+  ParcelCalculateRequest,
+} from './types/api';
+import { api } from './services/api';
 import {
   Package,
   Car,
@@ -34,20 +41,50 @@ const MainApp: React.FC = () => {
   const [statsModalOpen, setStatsModalOpen] = useState(false);
   const [compareModalOpen, setCompareModalOpen] = useState(false);
   const [errorToast, setErrorToast] = useState<string | null>(null);
+  // The parcel request behind the result on screen, so "Порівняти правила" compares THIS parcel.
+  const [lastParcelRequest, setLastParcelRequest] = useState<ParcelCalculateRequest | null>(null);
+  const [comparingFromResult, setComparingFromResult] = useState(false);
+  const errorRef = useRef<HTMLDivElement | null>(null);
+  const resultRef = useRef<HTMLDivElement | null>(null);
+
+  // On phones the form is long: the error banner (top) and the result (below the form) are off-screen.
+  useEffect(() => {
+    if (errorToast) errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [errorToast]);
+  useEffect(() => {
+    if (calculationResult && window.matchMedia('(max-width: 1023px)').matches) {
+      resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [calculationResult]);
 
   const handleOpenAuth = (mode: 'signin' | 'signup' = 'signin') => {
     setAuthMode(mode);
     setAuthModalOpen(true);
   };
 
-  const handleCalculated = (result: CalculationResult) => {
+  const handleCalculated = (result: CalculationResult, request?: CalculateRequest) => {
     setCalculationResult(result);
+    setLastParcelRequest(request?.delivery_type === 'parcel' ? request : null);
     setErrorToast(null);
   };
 
   const handleCompare = (comparison: CompareRulesResult) => {
     setCompareResult(comparison);
     setCompareModalOpen(true);
+    setErrorToast(null);
+  };
+
+  const handleCompareFromResult = async () => {
+    if (!lastParcelRequest || comparingFromResult) return;
+    try {
+      setComparingFromResult(true);
+      const { rules: _ignored, ...body } = lastParcelRequest;
+      handleCompare(await api.compareRules(body));
+    } catch (err: unknown) {
+      setErrorToast(err instanceof Error ? err.message : 'Не вдалося порівняти правила');
+    } finally {
+      setComparingFromResult(false);
+    }
   };
 
   const handleError = (msg: string) => {
@@ -75,7 +112,10 @@ const MainApp: React.FC = () => {
       <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 py-6 sm:py-8 overflow-x-hidden">
         {/* Error Toast */}
         {errorToast && (
-          <div className="mb-6 p-4 rounded-2xl bg-red-50 border border-red-200 text-red-700 flex items-center justify-between text-sm shadow-sm animate-in fade-in">
+          <div
+            ref={errorRef}
+            role="alert"
+            className="mb-6 p-4 rounded-2xl bg-red-50 border border-red-200 text-red-700 flex items-center justify-between text-sm shadow-sm animate-in fade-in">
             <div className="flex items-center gap-2.5">
               <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
               <span>{errorToast}</span>
@@ -183,19 +223,13 @@ const MainApp: React.FC = () => {
               </div>
 
               {/* Breakdown or Pitch Placeholder container */}
-              <div className="lg:col-span-6">
+              <div ref={resultRef} className="lg:col-span-6 scroll-mt-4">
                 {calculationResult ? (
                   <BreakdownView
                     result={calculationResult}
                     onOpenAuth={() => handleOpenAuth('signin')}
                     onCompareRules={
-                      deliveryType === 'parcel'
-                        ? () => {
-                            if (compareResult) {
-                              setCompareModalOpen(true);
-                            }
-                          }
-                        : undefined
+                      deliveryType === 'parcel' && lastParcelRequest ? handleCompareFromResult : undefined
                     }
                   />
                 ) : (
@@ -217,7 +251,7 @@ const MainApp: React.FC = () => {
                             Посилки: поріг €150 та зміни 2027 року
                           </strong>
                           <p className="text-slate-600 leading-relaxed">
-                            Зараз товари до €150 ввозяться без податків. Якщо посилка на €200 — податки нараховуються лише на різницю (€50): мито 10% + ПДВ 20% = всього <strong>€16</strong>. Проте з липня 2027 обов'язковий ПДВ 20% діятиме від першого євро!
+                            Зараз товари до €150 ввозяться без податків. Якщо посилка на €200 — податки нараховуються лише на різницю (€50): мито 10% + ПДВ 20% = всього <strong>€16</strong>. Проте з липня 2027 обов'язковий ПДВ 20% діятиме від першого євро, а для посилок понад €150 мито й ПДВ рахуватимуться з усієї вартості (€200 → €64).
                           </p>
                         </div>
                       </div>

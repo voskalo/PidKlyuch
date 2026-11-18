@@ -143,7 +143,7 @@ Update the Status column above when a criterion is met.
 | Backend language/framework | **Python 3.12+ / FastAPI** | `backend/`, entry point `app.main:app` (uvicorn on `$PORT`, default `8000`, `--proxy-headers`) |
 | ORM / Database | **SQLAlchemy 2.0**: SQLite locally, **PostgreSQL 16** in prod | Set via `DATABASE_URL` (`postgres:16-alpine` in Compose or AWS RDS Postgres); tables auto-created on startup via `init_db()` |
 | Auth method | **JWT bearer tokens** (PyJWT, HS256) + optional **Google Sign-In** (GIS ID tokens) | Passwords hashed with stdlib PBKDF2-SHA256 (`390,000` iterations); Google ID tokens verified via `google-auth` (`POST /api/auth/google`) |
-| Tests | **pytest** + FastAPI `TestClient` | `cd backend && .venv/bin/pytest` (126 tests passing on `main`) |
+| Tests | **pytest** + FastAPI `TestClient` | `cd backend && .venv/bin/pytest` (164 tests passing on `liubomyr/verify-tax-rules`) |
 | Frontend framework | **React 19 / TypeScript / Vite 8 / Tailwind CSS v4** | `frontend/`, Lucide Icons, dev proxy `/api` → `127.0.0.1:8000`; built with Node 22 and served on `:80` behind Caddy in prod |
 | Hosting (backend & frontend) | **AWS EC2 (Ubuntu 24.04)** + **Docker Compose + Caddy v2** (automatic HTTPS) | Single HTTPS origin via `<EC2-IP>.sslip.io` (Let's Encrypt TLS); `/api/*` → `backend:8000`, `/*` → `frontend:80` |
 | Database (prod) | **PostgreSQL 16** (Docker Compose `db` or **AWS RDS for PostgreSQL**) | Set via `DATABASE_URL` (`?sslmode=require` if using RDS; never SQLite in prod) |
@@ -184,9 +184,12 @@ PidKlyuch/
 │   │   ├── models/            # SQLAlchemy ORM models: user.py (User), calculation.py (Calculation)
 │   │   ├── services/          # auth_service.py, rates_service.py, calculation_service.py, history_service.py
 │   │   └── customs/           # pure Python engine: tax_rates.json, rules.py, models.py, calculators.py
-│   └── tests/                 # pytest (126 tests). Run: cd backend && .venv/bin/pytest
+│   └── tests/                 # pytest (164 tests). Run: cd backend && .venv/bin/pytest
 │                              #   test_edge_cases.py = hostile/boundary input (bad tokens, NaN, decimals, thresholds
 │                              #   after conversion, car year/engine bounds, signup race, CORS) + 17.11 regressions
+│                              #   test_law_oracle.py = the law re-implemented independently, compared with the API on
+│                              #   1000 seeded random/boundary inputs (change BOTH it and tax_rates.json when a rate changes)
+│                              #   test_spec_fixtures.py = the 10 worked cases of docs/customs-rules.md §5.3 through the engine
 ├── frontend/                  # React 19 + TypeScript + Vite SPA (owner: Anna)
 │   ├── package.json           # React 19, TypeScript, Vite 8, Tailwind CSS v4, Lucide Icons
 │   ├── vite.config.ts         # dev server on port 5173 with proxy /api → http://127.0.0.1:8000
@@ -198,7 +201,9 @@ PidKlyuch/
 │       ├── index.css          # Tailwind CSS v4 root stylesheet
 │       ├── App.tsx            # Main UI layout, hero, calculator tabs (parcels/cars), state & modals
 │       ├── types/api.ts       # TypeScript models matching backend §8 contract
-│       ├── services/api.ts    # Fetch API wrapper with JWT Bearer auth & VITE_API_BASE_URL
+│       ├── services/api.ts    # Fetch API wrapper with JWT Bearer auth & VITE_API_BASE_URL; translates backend
+│       │                      #   errors (detail strings, 422 lists, network failure) into Ukrainian
+│       ├── utils/amount.ts    # parseAmount(): price input check mirroring the API limits (0…10 000 000, cents)
 │       ├── context/AuthContext.tsx # React AuthProvider (user state, login/signup/logout, token storage)
 │       └── components/        # Navbar, RatesBar, ParcelForm, CarForm, BreakdownView, CompareRulesModal, HistoryView, AuthModal, DonationModal, StatsModal, Footer
 ├── .github/workflows/ci-cd.yml # CI on every push/PR (backend pytest + frontend build); push to `deploy` → auto-deploy to EC2
@@ -294,10 +299,13 @@ instead of silently not saving to history. Retrying without the header works ano
 - On any `401`, clear the token and show sign-in.
 - CORS allows `http://localhost:5173` (Vite) and `http://localhost:3000` by default.
 
-**POST /api/auth/signup**: body `{"email": "a@b.com", "password": "8–128 chars", "name": "Anna"}` (`name` optional,
-max 100 chars, trimmed; blank → `null`; the email is trimmed and lowercased)
+**POST /api/auth/signup**: body `{"email": "a@b.com", "password": "8–128 chars", "password_confirm": "same again", "name": "Anna"}`
+(`name` optional, max 100 chars, trimmed; blank → `null`; the email is trimmed and lowercased)
 → `201 {"access_token": "...", "token_type": "bearer", "user": {"id": 1, "email": "a@b.com", "name": "Anna", "created_at": "ISO"}}`.
-`409` if the email is already registered.
+`409` if the email is already registered. **`password_confirm` is required (since 18.11)** and must equal `password`
+exactly (case-sensitive, no trimming); otherwise `422` with `detail[].loc[-1] == "password_confirm"` and msg
+`"Value error, Passwords do not match"` (or type `missing`), and no account is created. If `password` itself is invalid
+(too short/long), only the `password` error is reported. Sign-in does NOT take `password_confirm`.
 
 **POST /api/auth/signin**: body `{"email", "password"}` → `200`, same shape as signup. `401` on wrong credentials.
 
@@ -321,6 +329,7 @@ max 100 chars, trimmed; blank → `null`; the email is trimmed and lowercased)
 ```
 - `engine_type`: `petrol | diesel | hybrid | electric` (`engine_volume_cc` required for petrol/diesel/hybrid; `battery_kwh` required for electric)
 - `origin`: `eu | other` (`eu` = EUR.1 / origin declaration proved, 0% duty; EVs always have 0% duty)
+- `is_new`: optional `true | false` (since 18.11). Means "never used" in the Customs Tariff sense; it only matters for the 5% duty on new petrol/hybrid cars over 3000 cm³. If omitted, a car made in the current year or later counts as new.
 
 Response `200`:
 ```json
@@ -411,6 +420,13 @@ Format: `YYYY-MM-DD: decision: reason (who)`
   deploy key, a pinned host key, and fast-forward-only updates on the server (never `reset --hard`, never touches
   `infra/.env`). Alternative considered: GitHub OIDC → IAM role → SSM Run Command (no SSH key) — better long-term,
   but needs IAM setup in Anton's AWS account; not worth it the day before the demo. (Liubomyr + Claude Code)
+- 2026-11-18: **Sign-up asks for the password twice, and the backend enforces it** (`password_confirm` required in
+  `SignUpIn`, exact match). Reason: a typo in a single password field creates an account the user cannot sign in to;
+  checking only in the UI would let any other client skip it. (Liubomyr + Claude Code)
+- 2026-11-18: The UI validates prices against the API limits before sending (`utils/amount.ts`), rounds extra decimals
+  to cents instead of failing, and `services/api.ts` translates every backend error to Ukrainian. Reason: users saw
+  English pydantic texts ("Decimal input should have no more than 2 decimal places", "Email already registered").
+  (Liubomyr + Claude Code)
 ---
 
 ## 11. Open issues / TODO
@@ -428,7 +444,9 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - [ ] Run Wednesday user-testing sessions (15+ external testers, collect quotes, UX fixes, and donation screenshots) and write `docs/report.pdf` (all, Wed 18 – Thu 19 Nov).
 - [ ] Re-check by hand when the Cabinet sets the start date of the July 2027 parcel VAT (source `law_5025_ix`) (Liubomyr).
 - [ ] Optional: a "luggage" delivery type. The rules are already verified (Customs Code 374 p.1 and p.4) (Liubomyr).
-- [ ] Frontend: show a Ukrainian message after a 401 on calculate, and limit price inputs to 2 decimals (Anna).
+- [x] Frontend: Ukrainian messages for 401/422/network errors and 2-decimal price handling (done 18.11 by Liubomyr, see §12).
+- [x] Frontend: "Нове авто" checkbox in `CarForm.tsx` that sends `is_new` (done 18.11 by Liubomyr, see §12).
+- [ ] In January 2027, re-check the EU-origin car duty rate for 2027 (source `dcfta_car_duty`) (Liubomyr).
 
 ---
 
@@ -646,18 +664,97 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **How to verify / run:** `cd frontend && npm run build` (0 errors); inspect parcel and car forms: price inputs have clean labels without top pills, with currency selector on the right.
 - **Not done / known problems / next steps:** Push `main` and deploy to EC2 (`git push origin main:deploy`).
 
+
+### 2026-11-18: Re-verified ALL tax conditions against the official law texts; fixed July 2027 (>€150) and the 5% car duty
+- **Who:** Liubomyr Voskalo via Claude Code (Opus 5.5)
+- **Area:** backend / docs (customs rules), plus wording-only edits in Anna's `frontend/` and Anton's `docs/customs-rules.md`
+- **What was done:** Downloaded and read the official texts: Customs Code (rev. 23.10.2026), Tax Code (rev. 01.11.2026),
+  the enacted Laws 5025-IX and 5026-IX, and the Customs Tariff table for 8703.
+  - **Confirmed correct:** today's parcel rules (≤€150 free; above that, duty on the excess and VAT on excess + duty,
+    TC 191.1.1); shipping excluded (MK 368); car excise, age coefficient, customs value incl. transport to the border
+    (MK 58); car VAT base (TC 190.1); EVs 0% duty and no VAT exemption; €45 P2P gift exemption (TC 197.30, now from
+    the law text, not news); EU-origin 0% for 2026.
+  - **Fixed (1) July 2027, parcels > €150:** the duty and VAT base is the FULL value (Law 5026-IX item 19, Law 5025-IX
+    item 6), not the excess. `tax_rates.json` → `above_threshold_base: "full_value"`; €200 → €64 (was €16).
+  - **Fixed (2) car duty:** new petrol/petrol-hybrid cars over 3000 cm³ pay 5%, not 10% (`duty_exceptions` in
+    `tax_rates.json`, `DutyException` in `rules.py`, `CarCalculator._duty_rate`, new optional API field `is_new`).
+  - Replaced news-site sources with official texts, and added 7 watched clauses (11 total, all fingerprinted).
+  - Corrected the wrong 2027/duty statements in Anna's UI text (`CompareRulesModal.tsx`, `ParcelForm.tsx`, `App.tsx`,
+    `CarForm.tsx`; wording only) and in Anton's `docs/customs-rules.md` (§§ sources, 2.1, 2.2 Case C, 2.3, 4.1, 4.2, 5.1,
+    5.3 fixture; `excess_eur` → `duty_base_eur` in the 2027 fixture objects).
+  - Added `backend/tests/test_spec_fixtures.py`: runs all 10 spec cases through the engine. The old spec values fail 3.
+- **Files touched:** `backend/app/customs/{tax_rates.json,rules.py,calculators.py,models.py}`,
+  `backend/app/api/schemas_calc.py`, `backend/app/services/calculation_service.py`,
+  `backend/tests/{test_customs.py,test_calculate_api.py,test_spec_fixtures.py}`, `docs/customs-rules.md`,
+  `frontend/src/{App.tsx,components/CompareRulesModal.tsx,components/ParcelForm.tsx,components/CarForm.tsx}`, `AGENTS.md`
+  (§8, §11, §12, §13).
+- **Decisions & why:** `is_new` is optional and defaults to "made this year or later", so the current frontend keeps working.
+- **How to verify / run:** `cd backend && .venv/bin/pytest` (154 passed); `.venv/bin/python scripts/check_law_updates.py`
+  (11 `[ok]`); `cd frontend && npm run build`.
+- **Not done / known problems / next steps:** optional `is_new` checkbox in the UI (Anna); EU 2027 rate check in Jan 2027;
+  the live site gets these changes on the next `git push origin main:deploy`.
+
+
+### 2026-11-18: Edge-case audit of the whole calculator + password confirmation on sign-up
+- **Who:** Liubomyr Voskalo via Claude Code (Opus 5.5)
+- **Area:** backend + frontend (cross-area: edits in Anna's `frontend/`, listed below)
+- **What was done:**
+  - **Password typed twice on sign-up.** Backend: `SignUpIn.password_confirm` (required, exact match, validator
+    `_passwords_match` in `backend/app/api/schemas_auth.py`) → 422 on mismatch, no account created (§8). Frontend:
+    `AuthModal.tsx` sign-up mode has a "Повторіть пароль *" field in the existing style, a live hint ("Паролі не
+    збігаються" red / "Паролі збігаються" green), red border + `aria-invalid` on mismatch, submit blocked until they
+    match, the error banner clears when a password is edited, `autoComplete` new-password/current-password. Sign-in
+    still has one field. `api.signup(email, password, passwordConfirm, name?)`, `AuthContext.signup` updated.
+  - **Calculator bugs fixed (found by probing like a user):**
+    1. "Порівняти правила" under a parcel result did nothing unless the form's compare button had been used, and then
+       showed the comparison of an OLD price. `App.tsx` now keeps the last parcel request and fetches a fresh
+       comparison for it (`handleCompareFromResult`).
+    2. Prices with 3+ decimals or over 10 000 000 produced English 422 texts. New `frontend/src/utils/amount.ts`
+       (`parseAmount`) checks limits with Ukrainian messages and rounds to cents; used by `ParcelForm` and `CarForm`.
+    3. All backend errors are shown in Ukrainian (`services/api.ts`: `DETAIL_UK`, per-field 422 texts, offline →
+       "Немає з'єднання з сервером…").
+    4. Engine volume typed in litres ("1.6") now gets "Схоже, це об'єм у літрах… 1600 см³" in the field's own
+       validation bubble (`engineVolumeProblem` in `CarForm.tsx`); battery limited to 500 kWh like the API; year
+       range 1950…current year like the API (was 1980).
+    5. On phones the error banner (top) and the result (below the form) were off-screen: `App.tsx` scrolls them into
+       view.
+    6. New "Нове авто (раніше не використовувалося)" checkbox in `CarForm.tsx`, shown only when it matters
+       (non-EU petrol/hybrid over 3000 cm³); default = made this year; sends `is_new` only then.
+  - **Proof of the math:** `backend/tests/test_law_oracle.py` re-implements the law independently and compares it with
+    `/api/calculate` on 1000 seeded random + boundary inputs (6000 in a one-off run: 0 mismatches). Mutation check:
+    changing any of duty 10%, the 5% exception, its 3000 cm³ limit, the 2027 base or the €150 threshold in
+    `tax_rates.json` makes it fail.
+  - **Browser test (Playwright, scratch, not committed):** 57/57 UI checks on desktop + 375 px phone: sign-up mismatch
+    blocked (no request sent), case/space differences, empty confirmation, duplicate email and wrong password in
+    Ukrainian, €200 → €16 today / €64 July 2027, €45 gift, €150 / €150.01 boundaries, stale-compare fix, rounding,
+    too-big/negative/empty prices, offline, litres hint, `is_new` checkbox (5% vs 10%), 1975 car, EV, history, garbage
+    token, no horizontal scroll, no JS errors.
+- **Files touched:** `backend/app/api/schemas_auth.py`, `backend/tests/{test_auth.py,test_edge_cases.py,test_history.py,
+  test_law_oracle.py (new)}`, `frontend/src/{App.tsx,services/api.ts,types/api.ts,context/AuthContext.tsx,
+  utils/amount.ts (new),components/AuthModal.tsx,components/ParcelForm.tsx,components/CarForm.tsx}`, `README.md`
+  (test count), `AGENTS.md` (§5, §6, §8, §10, §11, §12).
+- **Decisions & why:** see §10 (password confirmation enforced in the backend; UI-side price checks + translation).
+- **How to verify / run:** `cd backend && .venv/bin/pytest` (164 passed); `.venv/bin/python scripts/check_law_updates.py`
+  (11 `[ok]`); `cd frontend && npx tsc -b --noEmit && npm run lint && npm run build` (0 errors, only the 7 old warnings).
+- **Not done / known problems / next steps:** a browser tab left open on the OLD frontend during the deploy gets a 422
+  on sign-up until it reloads (the new backend requires `password_confirm`). Live site gets all this on the next
+  `git push origin main:deploy` after PR #7 is merged.
+
 ---
 
-## 13. Domain notes: Ukrainian customs (VERIFIED & LOCKED 2026-11-17)
+## 13. Domain notes: Ukrainian customs (RE-VERIFIED 2026-11-18 against the official law texts)
 
-All numbers live in `backend/app/customs/tax_rates.json` (verified against `zakon.rada.gov.ua` Customs Code rev. 23.10.2026, Tax Code rev. 01.11.2026, and Laws № 5025-IX / № 5026-IX of 15.10.2026) and are documented with 10 worked test fixtures in [`docs/customs-rules.md`](docs/customs-rules.md).
+All numbers live in `backend/app/customs/tax_rates.json` (verified against `zakon.rada.gov.ua`: Customs Code rev. 23.10.2026, Tax Code rev. 01.11.2026, the enacted texts of Laws № 5025-IX / № 5026-IX of 15.10.2026, and Customs Tariff 2697-IX) and are documented with 10 worked test fixtures in [`docs/customs-rules.md`](docs/customs-rules.md). `backend/tests/test_spec_fixtures.py` fails if the spec and the engine disagree. The law watcher fingerprints 11 source clauses.
 
 **Parcels (Customs Code art. 374 p.7–8):**
-- **Current rules:** Invoice value ≤ **€150.00** (goods only, shipping excluded) is tax-free. For `€150 < value ≤ €10,000`: **10%** duty + **20%** VAT on the **excess above €150** (`VAT = 20% × (excess + duty)`; €200 parcel → €5 duty + €11 VAT = **€16.00** ✔). Above €10,000 adds an approximate-calculation note.
-- **July 2027 rules (Laws № 5025-IX & № 5026-IX, ≥ 01.07.2027):** Marketplace parcels ≤ €150 pay **20% VAT** on goods value (no duty); non-commercial private-to-private parcels ≤ **€45.00** stay tax-free (`sender = "private"`); parcels > €150 remain unchanged.
+- **Current rules:** Invoice value ≤ **€150.00** is tax-free (MK 374 p.7). Shipping is **not** counted: MK 368 adds freight only for unaccompanied baggage and cargo shipments. For `€150 < value ≤ €10,000`: **10%** duty on the **excess above €150** (MK 374 p.7) and **20%** VAT on `(excess + duty)` (TC 191.1.1: "частина сумарної фактурної вартості … з урахуванням мита"). €200 parcel → €5 duty + €11 VAT = **€16.00** ✔. Above €10,000 adds an approximate-calculation note (MK 374 p.8).
+- **July 2027 rules (Laws № 5025-IX & № 5026-IX; they start 45 days after the Cabinet decision is published, but not before 01.07.2027):**
+  - ≤ €150: **no duty**, **20% VAT on the full value**. For marketplace orders the VAT is charged at checkout (TC 191-1.3; import exempt per TC 197.29); otherwise at import (TC 196.1.16–17 deleted).
+  - Gift sent **without payment** from one private person to another, ≤ **€45.00**: VAT-free (TC 197.30, `sender = "private"`).
+  - **> €150: 10% duty and 20% VAT on the FULL value**, not just the excess. Law 5026-IX item 19 sets MK 374 p.7's duty base to "їхня сумарна фактурна вартість"; Law 5025-IX item 6 changes TC 191.1.1 to "сумарна фактурна вартість". €200 parcel → €20 duty + €44 VAT = **€64.00**. *(Before 18.11 the code and spec wrongly kept the excess formula here; now fixed.)*
 
 **Cars (Tax Code 215.3.5-1, DCFTA):**
-- **Duty:** **10%** of `(car_price + shipping_to_border)` for `origin = "other"`; **0%** for `origin = "eu"` with EUR.1 / origin proof; **0%** for `electric`.
+- **Duty** (Customs Tariff 8703; customs value = car price + transport to the place of import, MK 58 p.10): **10%** for `origin = "other"`; **5% for NEW `petrol`/`hybrid` cars over 3000 cm³** (8703 24 10 00, 8703 40 10 80, 8703 60 10 80; "new" = optional `is_new`, else manufacture year ≥ current year); **0%** for `electric` (8703 80 x0 10); **0%** for `origin = "eu"` with EUR.1 / origin proof. That last rate is set per year: 0% for 01.01–31.12.2026 per State Customs Service letter 15/15-03-02/20836 of 22.12.2025, so re-check it in January 2027. UK/Canada/Israel/EFTA FTAs may also give 0%; this is not modeled.
 - **Excise:** `base × (cc / 1000) × K_age`, where `base` is `€50/€100` (`petrol` ≤3000 / >3000 cc) or `€75/€150` (`diesel` ≤3500 / >3500 cc), `hybrid` uses `petrol` rate, and `K_age = clamp(current_year − manufacture_year − 1, 1, 15)`. Electric (`8703 80`) = `€1/kWh`.
 - **VAT:** **20%** on `(customs_value + duty + excise)` (EV VAT exemption expired 01.01.2026). Pension Fund levy, certification, and broker fees excluded.
 - **Pitch check (€10,000 car):** EU new 0.8L petrol or 40 kWh EV → **€2,048.00**; 2013 non-EU 2.0L petrol ($K_{age}=12$) or 2.0L diesel ($K_{age}=8$) → **€4,640.00** ✔.

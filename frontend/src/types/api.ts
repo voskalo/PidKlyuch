@@ -27,6 +27,8 @@ export interface CarCalculateRequest {
   battery_kwh?: number | null;
   manufacture_year: number;
   origin?: CarOrigin;
+  // Customs Tariff "new" (never used). Omitted: a car made this year counts as new.
+  is_new?: boolean | null;
 }
 
 export type CalculateRequest = ParcelCalculateRequest | CarCalculateRequest;

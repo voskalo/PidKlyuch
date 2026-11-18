@@ -7,7 +7,7 @@ interface AuthContextType {
   token: string | null;
   loading: boolean;
   signin: (email: string, pass: string) => Promise<void>;
-  signup: (email: string, pass: string, name?: string) => Promise<void>;
+  signup: (email: string, pass: string, passConfirm: string, name?: string) => Promise<void>;
   googleLogin: (credential: string) => Promise<void>;
   signout: () => void;
   refreshUser: () => Promise<void>;
@@ -60,8 +60,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setToken(res.access_token);
   };
 
-  const signup = async (email: string, pass: string, name?: string) => {
-    const res = await api.signup(email, pass, name);
+  const signup = async (email: string, pass: string, passConfirm: string, name?: string) => {
+    const res = await api.signup(email, pass, passConfirm, name);
     setUser(res.user);
     setToken(res.access_token);
   };

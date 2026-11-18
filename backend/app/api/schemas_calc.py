@@ -29,6 +29,8 @@ class CarIn(BaseModel):
     battery_kwh: Decimal | None = Field(default=None, gt=0, le=500)
     manufacture_year: int = Field(ge=1950, le=Date.today().year + 1)
     origin: Literal["eu", "other"] = "other"
+    # Customs Tariff "new" (never used). Optional: if omitted, a car made this year or later counts as new.
+    is_new: bool | None = None
 
     @model_validator(mode="after")
     def _engine_fields(self):

@@ -126,7 +126,7 @@ cp .env.example .env            # defaults work locally (SQLite file pidklyuch.d
 
 - API health: `http://localhost:8000/api/health`
 - Interactive Swagger docs: `http://localhost:8000/docs`
-- Unit tests (`66` tests): `cd backend && .venv/bin/pytest`
+- Unit tests (`164` tests): `cd backend && .venv/bin/pytest`
 - Law watcher check: `cd backend && .venv/bin/python scripts/check_law_updates.py`
 - With Docker instead: `docker build -t pidklyuch-backend backend && docker run -p 8000:8000 pidklyuch-backend`
 

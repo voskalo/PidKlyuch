@@ -1,11 +1,14 @@
+import pytest
 from google.oauth2 import id_token
 
 from app.core.config import get_settings
 from app.core.security import hash_password, verify_password
 
 
-def _signup(client, email="user@example.com", password="secret123", name="Test"):
-    return client.post("/api/auth/signup", json={"email": email, "password": password, "name": name})
+def _signup(client, email="user@example.com", password="secret123", name="Test", password_confirm=None):
+    confirm = password if password_confirm is None else password_confirm
+    return client.post("/api/auth/signup",
+                       json={"email": email, "password": password, "password_confirm": confirm, "name": name})
 
 
 def test_password_hash_roundtrip():
@@ -150,3 +153,50 @@ def test_google_auth_unverified_email_and_audience(client, monkeypatch):
     finally:
         monkeypatch.delenv("GOOGLE_CLIENT_ID", raising=False)
         get_settings.cache_clear()
+
+
+# --- Password typed twice on sign-up (password_confirm) ----------------------------------------
+
+def _confirm_errors(r):
+    return [e for e in r.json()["detail"] if e["loc"][-1] == "password_confirm"]
+
+
+@pytest.mark.parametrize("confirm", [
+    "secret124",      # one character off
+    "Secret123",      # case differs
+    "secret123 ",     # trailing space (not trimmed)
+    " secret123",     # leading space
+    "",               # left empty
+])
+def test_signup_rejects_mismatched_confirmation_and_creates_no_user(client, confirm):
+    r = _signup(client, password="secret123", password_confirm=confirm)
+    assert r.status_code == 422
+    errors = _confirm_errors(r)
+    assert len(errors) == 1 and "Passwords do not match" in errors[0]["msg"]
+    # nothing was created: the same email can still sign up, and cannot sign in
+    assert client.post("/api/auth/signin", json={"email": "user@example.com", "password": "secret123"}).status_code == 401
+    assert _signup(client).status_code == 201
+
+
+def test_signup_requires_the_confirmation_field(client):
+    r = client.post("/api/auth/signup", json={"email": "user@example.com", "password": "secret123"})
+    assert r.status_code == 422
+    assert [e["type"] for e in _confirm_errors(r)] == ["missing"]
+
+
+def test_too_short_password_reports_only_the_length_problem(client):
+    r = _signup(client, password="short", password_confirm="other")
+    assert r.status_code == 422
+    assert [e["loc"][-1] for e in r.json()["detail"]] == ["password"]
+
+
+def test_matching_confirmation_signs_up_and_password_works(client):
+    pw = "Пароль з пробілом 🔑"
+    assert _signup(client, password=pw, password_confirm=pw).status_code == 201
+    assert client.post("/api/auth/signin", json={"email": "user@example.com", "password": pw}).status_code == 200
+
+
+def test_signin_does_not_need_confirmation(client):
+    _signup(client)
+    r = client.post("/api/auth/signin", json={"email": "user@example.com", "password": "secret123"})
+    assert r.status_code == 200

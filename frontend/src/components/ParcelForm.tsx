@@ -9,6 +9,7 @@ import type {
   CompareRulesResult,
 } from '../types/api';
 import { api } from '../services/api';
+import { parseAmount } from '../utils/amount';
 import {
   Package,
   Laptop,
@@ -24,7 +25,7 @@ import {
 } from 'lucide-react';
 
 interface ParcelFormProps {
-  onCalculated: (result: CalculationResult) => void;
+  onCalculated: (result: CalculationResult, request: ParcelCalculateRequest) => void;
   onCompare: (comparison: CompareRulesResult) => void;
   onError: (err: string) => void;
 }
@@ -60,19 +61,26 @@ export const ParcelForm: React.FC<ParcelFormProps> = ({
   const [loading, setLoading] = useState(false);
   const [comparing, setComparing] = useState(false);
 
+  // Validates both prices; reports the first problem and returns null if any.
+  const readPrices = (): { priceNum: number; shipNum: number } | null => {
+    const price = parseAmount(itemPrice, 'вартість товару', { required: true });
+    if (price.error !== null) {
+      onError(price.error);
+      return null;
+    }
+    const ship = parseAmount(shippingPrice, 'вартість доставки');
+    if (ship.error !== null) {
+      onError(ship.error);
+      return null;
+    }
+    return { priceNum: price.value, shipNum: ship.value };
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const priceNum = parseFloat(itemPrice);
-    if (isNaN(priceNum) || priceNum < 0) {
-      onError('Вкажіть коректну вартість товару');
-      return;
-    }
-
-    const shipNum = shippingPrice ? parseFloat(shippingPrice) : 0;
-    if (isNaN(shipNum) || shipNum < 0) {
-      onError('Вкажіть коректну вартість доставки');
-      return;
-    }
+    const prices = readPrices();
+    if (!prices) return;
+    const { priceNum, shipNum } = prices;
 
     try {
       setLoading(true);
@@ -86,7 +94,7 @@ export const ParcelForm: React.FC<ParcelFormProps> = ({
         sender,
       };
       const res = await api.calculate(req);
-      onCalculated(res);
+      onCalculated(res, req);
     } catch (err: unknown) {
       onError(err instanceof Error ? err.message : 'Не вдалося розрахувати');
     } finally {
@@ -95,13 +103,9 @@ export const ParcelForm: React.FC<ParcelFormProps> = ({
   };
 
   const handleCompareClick = async () => {
-    const priceNum = parseFloat(itemPrice);
-    if (isNaN(priceNum) || priceNum < 0) {
-      onError('Вкажіть коректну вартість товару для порівняння');
-      return;
-    }
-
-    const shipNum = shippingPrice ? parseFloat(shippingPrice) : 0;
+    const prices = readPrices();
+    if (!prices) return;
+    const { priceNum, shipNum } = prices;
 
     try {
       setComparing(true);
@@ -307,6 +311,9 @@ export const ParcelForm: React.FC<ParcelFormProps> = ({
                 </li>
                 <li>
                   <strong>Приватна особа:</strong> подарунки від рідних чи друзів вартістю <strong>до €45 залишаються безмитними</strong>!
+                </li>
+                <li>
+                  <strong>Посилка понад €150:</strong> мито 10% і ПДВ 20% рахуватимуться з <strong>усієї вартості</strong>, а не лише з різниці понад €150.
                 </li>
               </ul>
             </div>

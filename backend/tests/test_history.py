@@ -6,7 +6,7 @@ from tests.test_calculate_api import CAR, PARCEL
 
 
 def _auth(client, email="h@example.com"):
-    r = client.post("/api/auth/signup", json={"email": email, "password": "secret123"})
+    r = client.post("/api/auth/signup", json={"email": email, "password": "secret123", "password_confirm": "secret123"})
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
 
 

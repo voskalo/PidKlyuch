@@ -1,7 +1,7 @@
 {
-  "version": "2026-11-16",
-  "verified_at": "2026-11-16",
-  "verified_by": "Liubomyr Voskalo (via Claude Code), against official texts on zakon.rada.gov.ua",
+  "version": "2026-11-18",
+  "verified_at": "2026-11-18",
+  "verified_by": "Liubomyr Voskalo (via Claude Code), against the official texts on zakon.rada.gov.ua: Customs Code (rev. 23.10.2026), Tax Code (rev. 01.11.2026), Laws 5025-IX and 5026-IX (15.10.2026), Customs Tariff 2697-IX",
   "currency": "EUR",
   "how_to_update": "Edit numbers here only, then run `pytest` and `python scripts/check_law_updates.py --update` to store new source fingerprints. Every change must say which law changed it (see sources).",
   "parcel_rule_sets": {
@@ -15,13 +15,16 @@
       "simplified_limit_eur": 10000,
       "sources": [
         "customs_code_374_p7",
-        "customs_code_374_p8"
+        "customs_code_374_p8",
+        "tax_code_191_1_1",
+        "customs_code_368"
       ],
       "notes": [
-        "Ліміт €150 рахується від фактурної вартості товарів в одному відправленні (без доставки).",
-        "Мито 10% і ПДВ 20% нараховуються лише на частину вартості понад €150 (ст. 374 МКУ).",
+        "Ліміт €150 рахується від фактурної вартості товарів в одному відправленні; доставка не враховується (ст. 368 МКУ).",
+        "Понад €150: мито 10% і ПДВ 20% лише з частини вартості понад €150; ПДВ рахується з цієї частини разом із митом (ст. 374 МКУ, пп. 191.1.1 ПКУ).",
         "Підакцизні товари (алкоголь, тютюн тощо) у посилках оподатковуються за іншими правилами."
-      ]
+      ],
+      "above_threshold_base": "excess"
     },
     "july_2027": {
       "title": "Правила з липня 2027",
@@ -32,16 +35,19 @@
       "private_exempt_up_to_eur": 45,
       "simplified_limit_eur": 10000,
       "sources": [
-        "law_5025_ix",
+        "law_5026_ix_art374",
+        "law_5025_ix_art197",
+        "law_5025_ix_art191_1",
         "tax_code_14_1_49_1",
-        "customs_code_374_p7"
+        "customs_code_368"
       ],
       "notes": [
-        "Закони № 5025-IX і 5026-IX від 15.10.2026: ПДВ 20% на посилки до €150 — не раніше 1 липня 2027 року, після рішення уряду. Мито на них не запроваджується.",
-        "ПДВ на покупки з маркетплейсів стягується під час оплати замовлення.",
-        "Некомерційні посилки від фізособи фізособі до €45 залишаються без податків.",
-        "Для посилок понад €150 правила не змінюються: мито 10% і ПДВ 20% з частини понад €150."
-      ]
+        "Закони № 5025-IX і 5026-IX від 15.10.2026 діятимуть через 45 днів після рішення уряду, але не раніше 1 липня 2027 року.",
+        "До €150: мита немає, ПДВ 20% з повної вартості товару; на маркетплейсах ПДВ стягується під час оплати замовлення.",
+        "Некомерційна посилка-подарунок від фізособи фізособі до €45 — без ПДВ (п. 197.30 ПКУ).",
+        "Понад €150: мито 10% і ПДВ 20% з ПОВНОЇ вартості товару, а не лише з частини понад €150 (ст. 374 МКУ в редакції Закону № 5026-IX)."
+      ],
+      "above_threshold_base": "full_value"
     }
   },
   "car_rule_sets": {
@@ -69,15 +75,32 @@
       "age_coef_max": 15,
       "sources": [
         "tax_code_215_3_5_1",
+        "customs_tariff_8703",
+        "customs_code_58",
         "ev_vat_exemption_ended_2026",
         "dcfta_car_duty"
       ],
       "notes": [
-        "Митна вартість = ціна авто + доставка до кордону України.",
+        "Митна вартість = ціна авто + доставка до кордону України (ст. 58 МКУ).",
         "Акциз = базова ставка × (об'єм / 1000 см³) × коефіцієнт віку; коефіцієнт віку = повні роки з року, наступного за роком випуску (від 1 до 15).",
-        "ПДВ 20% нараховується на (митна вартість + мито + акциз).",
-        "Мито 0% для авто з ЄС — лише за підтвердженого походження (EUR.1 / декларація походження); купівля в ЄС сама по собі не робить авто «європейським».",
+        "ПДВ 20% нараховується на (митна вартість + мито + акциз) (п. 190.1 ПКУ).",
+        "Мито 10%; нові бензинові авто та бензинові гібриди понад 3000 см³ — 5%; електромобілі — 0% (Митний тариф).",
+        "Мито 0% для авто походженням з ЄС (на 2026 рік) — лише за підтвердженого походження (EUR.1 / декларація походження); купівля в ЄС сама по собі не робить авто «європейським».",
+        "Угоди про вільну торгівлю з Великою Британією, Канадою, Ізраїлем та ЄАВТ теж можуть давати 0% — у калькуляторі не враховано.",
         "Без урахування збору до Пенсійного фонду при першій реєстрації, сертифікації та послуг брокера."
+      ],
+      "duty_exceptions": [
+        {
+          "engine_types": [
+            "petrol",
+            "hybrid"
+          ],
+          "only_new": true,
+          "engine_cc_over": 3000,
+          "rate": 0.05,
+          "label": "нове бензинове авто понад 3000 см³",
+          "source_note": "Customs Tariff 8703 24 10 00, 8703 40 10 80, 8703 60 10 80: preferential rate 5% (used cars and diesels: 10%)"
+        }
       ]
     }
   },
@@ -114,24 +137,74 @@
       "end": "{Пункт 14.1 статті 14 доповнено підпунктом 14.1.49 - 1",
       "fingerprint": "1ce31c6456669332"
     },
-    "law_5025_ix": {
-      "title": "Закони № 5025-IX (ПКУ) і № 5026-IX (МКУ) від 15.10.2026 — ПДВ на посилки до €150; старт не раніше 01.07.2027; виняток P2P до €45",
-      "url": "https://epravda.com.ua/finances/rada-ostatochno-uhvalila-zakonoproyekt-pro-opodatkuvannya-posilok-826591/",
-      "revision_checked": "15.10.2026",
-      "note": "Start date and the EUR 45 P2P exemption come from news coverage; the operative articles are not yet in the consolidated code text. Re-check when the Cabinet sets the start date."
-    },
     "ev_vat_exemption_ended_2026": {
       "title": "Звільнення електромобілів від ПДВ не продовжено з 01.01.2026 (Закон про Держбюджет-2026 № 4695-IX)",
       "url": "https://7eminar.ua/news/10284-pilgove-rozmitnennya-elektrokariv-skasuyut-z-2026-roku",
-      "revision_checked": "16.11.2026",
-      "note": "Secondary source (several outlets agree). EV import duty 0% is a permanent tariff rate."
+      "revision_checked": "18.11.2026",
+      "note": "Checked 18.11: the Tax Code (rev. 01.11.2026) has no VAT exemption for importing electric cars (only producer-related clauses). Tariff 8703 80 x0 10 = 0% duty."
     },
     "dcfta_car_duty": {
-      "title": "Мито на легкові авто: 10% (Митний тариф, Закон № 2697-IX); 0% для авто походженням з ЄС за ЗВТ при підтвердженні походження",
-      "url": "https://zakon.rada.gov.ua/laws/show/2697-20",
-      "revision_checked": "16.11.2026",
-      "note": "Confirmed by multiple secondary sources; tariff annex not parsed automatically."
+      "title": "Мито 0% на легкові авто походженням з ЄС у 2026 (Угода про асоціацію; лист ДМС № 15/15-03-02/20836 від 22.12.2025)",
+      "url": "https://www.qdpro.com.ua/goodinfo/8703239013",
+      "revision_checked": "18.11.2026",
+      "note": "Rate is set per calendar year (valid 01.01–31.12.2026 for both new and used 8703 codes checked). Re-check in January 2027."
+    },
+    "customs_code_368": {
+      "title": "Митний кодекс України, ст. 368 — фактурна вартість товарів громадян (доставка додається лише для несупроводжуваного багажу та вантажних відправлень)",
+      "url": "https://zakon.rada.gov.ua/laws/show/4495-17/print",
+      "revision_checked": "23.10.2026",
+      "start": "Стаття 368. Визначення вартості товарів",
+      "end": "Стаття 369",
+      "fingerprint": "2ad95384d6804b09"
+    },
+    "customs_code_58": {
+      "title": "Митний кодекс України, ст. 58 — митна вартість включає транспортування до місця ввезення в Україну",
+      "url": "https://zakon.rada.gov.ua/laws/show/4495-17/print",
+      "revision_checked": "23.10.2026",
+      "start": "Стаття 58. Метод визначення митної вартості",
+      "end": "Стаття 59",
+      "fingerprint": "d19286a60d27d215"
+    },
+    "tax_code_191_1_1": {
+      "title": "Податковий кодекс України, пп. 191.1.1 — база ПДВ для посилок фізосіб: частина фактурної вартості з урахуванням мита",
+      "url": "https://zakon.rada.gov.ua/laws/show/2755-17/print",
+      "revision_checked": "01.11.2026",
+      "start": "191.1.1. У разі ввезення",
+      "end": "191.1.2.",
+      "fingerprint": "5eb8c98a6b1ff4eb"
+    },
+    "law_5026_ix_art374": {
+      "title": "Закон № 5026-IX від 15.10.2026, п. 19 — зміни до ст. 374 МКУ з 2027: до €150 без мита; понад €150 база мита — уся фактурна вартість",
+      "url": "https://zakon.rada.gov.ua/laws/show/5026-20/print",
+      "revision_checked": "15.10.2026",
+      "start": "19. У статті 374",
+      "end": "20. Доповнити статтею 374",
+      "fingerprint": "8e71ef7dc824e491"
+    },
+    "law_5025_ix_art197": {
+      "title": "Закон № 5025-IX від 15.10.2026 — пп. 196.1.16–17 ПКУ виключено; п. 197.29–197.30 (ПДВ при імпорті для дистанційного продажу; P2P-подарунки до €45 без ПДВ)",
+      "url": "https://zakon.rada.gov.ua/laws/show/5025-20/print",
+      "revision_checked": "15.10.2026",
+      "start": "8. Підпункти 196.1.16 і 196.1.17",
+      "end": "197.31.",
+      "fingerprint": "535d5915cfc2a7b4"
+    },
+    "law_5025_ix_art191_1": {
+      "title": "Закон № 5025-IX від 15.10.2026 — пп. 191.1.1 (база ПДВ: уся фактурна вартість) і ст. 191-1 (ПДВ 20% з фактурної вартості при дистанційному продажу); старт не раніше 01.07.2027",
+      "url": "https://zakon.rada.gov.ua/laws/show/5025-20/print",
+      "revision_checked": "15.10.2026",
+      "start": "у підпункті 191.1.1 слова",
+      "end": "191 - 1 .4.",
+      "fingerprint": "b9495691a794dbbd"
+    },
+    "customs_tariff_8703": {
+      "title": "Митний тариф України (Закон № 2697-IX), група 87, позиція 8703 — ставки мита на легкові авто",
+      "url": "https://zakon.rada.gov.ua/laws/show/2697%D0%B1-20/print",
+      "revision_checked": "18.11.2026",
+      "start": "8703 21 - - з робочим об",
+      "end": "8704 Моторні транспортні засоби для перевезення вантажів",
+      "fingerprint": "e8fc39bda668f8a7"
     }
   },
-  "sources_checked_at": "2026-11-16"
+  "sources_checked_at": "2026-11-18"
 }

@@ -79,10 +79,26 @@ def test_2027_private_parcel_above_45_pays_vat():
     assert b.line("vat").amount_eur == D("20.00")
 
 
-def test_2027_above_threshold_unchanged():
-    b = ParcelCalculator(PARCEL_JULY_2027).calculate(parcel("200"))
-    assert b.taxes_total_eur == D("16.00")
+def test_2027_above_threshold_taxes_the_full_value():
+    # Law 5026-IX item 19: duty base = whole invoice value; Law 5025-IX item 6: VAT base = whole value + duty
+    b = ParcelCalculator(PARCEL_JULY_2027).calculate(parcel("200", "20"))
+    assert b.line("duty").amount_eur == D("20.00")   # 10% × 200
+    assert b.line("vat").amount_eur == D("44.00")    # 20% × (200 + 20)
+    assert b.taxes_total_eur == D("64.00")
+    assert b.landed_total_eur == D("284.00")
+    assert b.line("duty").formula == "10% × 200.00 = 20.00 EUR"
     assert b.rules_key == "july_2027"
+
+
+@pytest.mark.parametrize("goods,current,july_2027", [
+    ("150.00", "0.00", "30.00"),      # at the limit: today free, 2027 VAT only
+    ("150.01", "0.00", "48.00"),      # today: 0.001 duty and 0.002 VAT round to 0; 2027: duty 15.00 + VAT 33.00
+    ("276.00", "40.32", "88.32"),     # docs/customs-rules.md TC-P4 (€276): 2027 duty 27.60 + VAT 60.72
+    ("1000.00", "272.00", "320.00"),  # TC-P5: 2027 duty 100 + VAT 220
+])
+def test_current_vs_2027_totals(goods, current, july_2027):
+    assert ParcelCalculator().calculate(parcel(goods)).taxes_total_eur == D(current)
+    assert ParcelCalculator(PARCEL_JULY_2027).calculate(parcel(goods)).taxes_total_eur == D(july_2027)
 
 
 def test_sender_does_not_matter_under_current_rules():
@@ -147,6 +163,29 @@ def test_engine_volume_thresholds_and_large_engine_rates():
 def test_hybrid_pays_excise_by_combustion_engine():
     b = CarCalculator(current_year=2026).calculate(car(engine_type=EngineType.HYBRID, manufacture_year=2022))
     assert b.line("excise").amount_eur == D("300.00")  # petrol rate: 50 × 2.0 × 3
+
+
+@pytest.mark.parametrize("engine,cc,year,is_new,rate", [
+    (EngineType.PETROL, 3500, 2026, None, "5"),    # new (this year) petrol > 3000 cm3 → 5% (tariff 8703 24 10 00)
+    (EngineType.HYBRID, 3500, 2026, None, "5"),    # new petrol hybrid > 3000 cm3 → 5% (8703 40 10 80 / 60 10 80)
+    (EngineType.PETROL, 3000, 2026, None, "10"),   # exactly 3000 cm3 is not "over 3000"
+    (EngineType.PETROL, 3500, 2024, None, "10"),   # used petrol > 3000 → 10%
+    (EngineType.PETROL, 3500, 2024, True, "5"),    # user says new (e.g. unsold 2024 stock) → 5%
+    (EngineType.PETROL, 3500, 2026, False, "10"),  # user says used → 10%
+    (EngineType.DIESEL, 3500, 2026, None, "10"),   # new diesel > 3000 → still 10% (8703 33 19 00)
+])
+def test_duty_rate_depends_on_new_and_engine(engine, cc, year, is_new, rate):
+    b = CarCalculator(current_year=2026).calculate(
+        car(engine_type=engine, engine_volume_cc=cc, manufacture_year=year, is_new=is_new)
+    )
+    assert b.line("duty").amount_eur == D("10000") * D(rate) / 100
+
+
+def test_eu_origin_beats_reduced_rate():
+    b = CarCalculator(current_year=2026).calculate(
+        car(engine_volume_cc=3500, manufacture_year=2026, origin=Origin.EU)
+    )
+    assert b.line("duty").amount_eur == D("0.00")
 
 
 def test_electric_car_no_duty_but_vat_since_2026():
