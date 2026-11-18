@@ -358,3 +358,35 @@ All 10 test cases below use a deterministic reference NBU rate fixture so unit t
   ]
 }
 ```
+
+---
+
+## 6. Excise Goods (alcohol, tobacco, e-liquids, fuel) — added 18.11.2026 (Liubomyr)
+
+- **Not in parcels:** Customs Code art. 235 p.1 items 6–7 ban alcohol, tobacco and other UKTZED chapter 1–24 goods (except
+  food ≤ 10 kg) in postal and express items to private persons, regardless of value. Art. 234 p.6: excise goods that may
+  be sent are taxed regardless of value (no €150 threshold). Fuel is a dangerous good under UPU rules.
+- **In luggage (what the calculator models, `delivery_type: "excise"`):** duty-free per adult (art. 376 p.2): 5 l beer,
+  2 l wine, 1 l spirits > 22 %, 200 cigarettes or 50 cigars or 250 g tobacco; fuel: tank + 20 l canister (art. 374 p.10
+  item 12). Abroad < 24 h: no alcohol/tobacco allowance (art. 376 p.3). Above the norm, only the excess is taxed:
+
+$$\text{Duty} + \text{Excise} + \text{VAT}_{20\%}(V_{\text{excess}} + \text{Duty} + \text{Excise}),\quad V_{\text{excess}} = V \times \frac{Q - Q_{\text{norm}}}{Q}$$
+
+| Kind | Duty (Customs Tariff, preferential) | Excise 2026 (TC) |
+|---|---|---|
+| Beer | €0.05 / l | 59.82 UAH per l of 100 % alcohol |
+| Still wine | €0.3 / l | 0.01 UAH / l |
+| Sparkling wine | €1.5 / l | 12.23 UAH / l |
+| Spirits > 22 % | 0 | 133.31 UAH per l of 100 % alcohol |
+| Cigarettes | €1.5 / 1000 | €61 / 1000 + 12 % of price, min €82 / 1000 |
+| Cigars | 10 % | €77 / kg |
+| Smoking / hookah tobacco | 20 % | €77 / kg |
+| Heated tobacco sticks | €1.8 / kg | €70.8 / 1000 |
+| E-liquid | 3 % | €300 / l |
+| Petrol | 10 % (≥ 5 % bio components) | €300.8 / 1000 l |
+| Diesel | 0 | €253.8 / 1000 l |
+
+Worked examples (1 EUR = 50 UAH, `backend/tests/test_excise.py`): 2 l whisky 40 %, €60 → 1 l taxed: duty 0, excise
+133.31 × 0.4 / 50 = €1.07, VAT 20 % × (30 + 0 + 1.07) = €6.21, **total €7.28**; 400 cigarettes, €12 → 200 taxed:
+duty €0.30, excise max(61 × 0.2 + 12 % × 6; 82 × 0.2) = €16.40, VAT €4.54, **total €21.24**.
+

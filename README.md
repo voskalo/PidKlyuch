@@ -41,7 +41,8 @@ and the report PDF.
 ### 👤 Anna Kravchenko: Frontend & UX  (`frontend/`)
 - Set up the frontend project and layout (mobile-friendly, since most users come from Telegram or TikTok on phones).
 - Sign-up and sign-in pages, plus "logged in / logged out" UI states.
-- **Smart input flow:** choose the delivery type (parcel / car), then answer a few short questions. Parcels need no goods category: the law taxes all non-excise goods in a parcel the same way.
+- **Smart input flow:** choose the delivery type (parcel / car / excise goods in luggage), then answer a few short questions. Parcels need no goods category: the law taxes all non-excise goods in a parcel the same way.
+- **Excise goods (alcohol, tobacco, e-liquids, fuel):** banned in parcels to private persons (Customs Code art. 235), so the calculator counts them for luggage: duty-free norms, the 24-hour rule, duty + excise + VAT above the norm.
 - **Result page:** itemized breakdown (duty, VAT, excise, total), the formula for each line, and the
   **"today vs. July 2027"** comparison for parcels.
 - **History page** for signed-in users.
@@ -126,7 +127,7 @@ cp .env.example .env            # defaults work locally (SQLite file pidklyuch.d
 
 - API health: `http://localhost:8000/api/health`
 - Interactive Swagger docs: `http://localhost:8000/docs`
-- Unit tests (`164` tests): `cd backend && .venv/bin/pytest`
+- Unit tests (`215` tests): `cd backend && .venv/bin/pytest`
 - Law watcher check: `cd backend && .venv/bin/python scripts/check_law_updates.py`
 - With Docker instead: `docker build -t pidklyuch-backend backend && docker run -p 8000:8000 pidklyuch-backend`
 
