@@ -115,8 +115,8 @@ Submit:
 |---|---|---|
 | Repo organised with top-level `backend/`, `frontend/`, `infra/` and a `README.md` that tells a stranger what the product is and how to run and deploy it | 3 | ✅ `backend/`, `frontend/`, `infra/`, `docs/`, and `README.md` complete |
 | Working prototype with sign-in: deployed, reachable over **HTTPS**, users can **sign up and sign in** | 3 | ✅ Live at `https://16.170.212.120.sslip.io` (AWS EC2 `i-00ab50698f9435a50`, Let's Encrypt HTTPS + React + FastAPI + Postgres 16) |
-| Report with user feedback: who you showed it to, how many tried it, what they said, **what you changed because of it** | 4 | 🟡 User testing script, Google Form & recruiting templates ready; sessions Wed 18 Nov |
-| **Bonus:** users ready to pay real money (donation to a volunteer cause, or a working payment in the product), with **evidence in the report** | bonus | ⬜ Donation modal ready in UI; collect screenshots during Wed testing |
+| Report with user feedback: who you showed it to, how many tried it, what they said, **what you changed because of it** | 4 | ✅ 15 external testers (`T-01`–`T-15`, `docs/feedback/responces.csv`), 86.7% completion, 4.07/5.0 clarity, UX/auth/infra fixes mapped in `docs/report.md` & `docs/PidKlyuch-Report.pdf` |
+| **Bonus:** users ready to pay real money (donation to a volunteer cause, or a working payment in the product), with **evidence in the report** | bonus | 🟡 14/15 (93.3%) positive: 3 declared already donated + 11 ready to donate 20–100 UAH (`docs/feedback/responces.csv`); no screenshot files uploaded yet |
 
 **Demo MVP scope (must have by Wed evening):**
 - Sign up, sign in, sign out.
@@ -228,7 +228,10 @@ PidKlyuch/
 │   └── README.md              # Deployment architecture, full-stack & fallback modes, AWS EC2 HTTPS guide
 └── docs/                      # Customs spec, user-testing docs, report (owner: Anton)
     ├── customs-rules.md       # Locked Ukrainian customs spec (parcels, cars, NBU rates, 10 test cases)
+    ├── feedback/responces.csv # Exported Google Form responses from 15 external testers (T-01..T-15)
+    ├── PidKlyuch-Report.pdf   # Final 6-page Ukrainian OOAD project report PDF (generated from docs/report.md)
     ├── recruiting-messages.md # Ukrainian outreach templates for Telegram/FB/DMs (15+ testers)
+    ├── report.md              # Final Ukrainian OOAD project report (architecture, 15-tester cohort, changes, willingness to pay)
     └── user-testing-plan.md   # Moderator script (2 tasks), Google Form questions, 15-tester tracker table
 ```
 
@@ -978,6 +981,15 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **How to verify / run:** after a deploy, `curl -sI https://16.170.212.120.sslip.io/` shows `x-frame-options: DENY`,
   `strict-transport-security` and no `server:` line.
 - **Not done / known problems / next steps:** none.
+
+### 2026-11-18 20:58: Generate final Ukrainian report (`docs/report.md` & `docs/PidKlyuch-Report.pdf`)
+- **Who:** Anton Vertyporoh via Antigravity CLI
+- **Area:** docs
+- **What was done:** Analyzed all 15 unique external tester responses (`T-01`–`T-15`) in `docs/feedback/responces.csv`, live `/api/stats` (`77` raw / `73` non-team calculations, `4` users), `docs/customs-rules.md`, and recent PRs #5–#10 (`257` passing backend tests). Authored the final Ukrainian OOAD report in `docs/report.md` and exported a 6-page PDF `docs/PidKlyuch-Report.pdf` via WeasyPrint 70.0, visually inspecting all rendered pages with `pypdfium2` PNGs to confirm clean tables, Ukrainian typography, and zero broken page breaks. Updated `AGENTS.md` §4 and §6.
+- **Files touched:** `docs/report.md` (created), `docs/PidKlyuch-Report.pdf` (created), `AGENTS.md` (§4, §6, §12)
+- **Decisions & why:** Rendered PDF from `docs/report.md` via WeasyPrint (`Arial` Unicode + `@page` running headers/footers + repeated `thead` across page breaks) for crisp Cyrillic tables; recorded donation evidence honestly (`3` declared already donated + `11` ready to donate 20–100 UAH, with no screenshot files uploaded in `responces.csv` or `docs/assets/`).
+- **How to verify / run:** Open `docs/PidKlyuch-Report.pdf` (6 pages, 113,431 bytes) and `docs/report.md`.
+- **Not done / known problems / next steps:** Collect actual donation screenshots if testers send them before the Thursday 19 Nov demo.
 
 ---
 
