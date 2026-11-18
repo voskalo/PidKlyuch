@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_optional_user
@@ -14,7 +14,7 @@ router = APIRouter(tags=["calculate"])
 
 @router.post("/calculate", response_model=CalculationOut)
 def calculate(
-    body: CalculationIn = Body(...),
+    body: CalculationIn,
     rates: RatesService = Depends(get_rates_service),
     user: User | None = Depends(get_optional_user),
     db: Session = Depends(get_db),

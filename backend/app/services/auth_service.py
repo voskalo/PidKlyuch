@@ -1,5 +1,6 @@
 """Account use cases: register and authenticate users."""
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_password, verify_password
@@ -22,7 +23,11 @@ class AuthService:
             raise EmailAlreadyRegistered(email)
         user = User(email=email.lower(), name=name, password_hash=hash_password(password))
         self.db.add(user)
-        self.db.commit()
+        try:
+            self.db.commit()
+        except IntegrityError:  # another request registered the same email in between
+            self.db.rollback()
+            raise EmailAlreadyRegistered(email)
         self.db.refresh(user)
         return user
 

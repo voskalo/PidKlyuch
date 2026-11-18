@@ -20,7 +20,7 @@
 | Current phase | Day 2 (Tue 17 Nov 2026): **Full-stack app live over HTTPS on AWS EC2** (`i-00ab50698f9435a50`, project `334177992228`, `eu-north-1`) with React 19 UI + FastAPI + PostgreSQL 16 + Caddy Let's Encrypt TLS; PR #3 (`anton/infra-and-docs`) ready to merge into `main`; user testing Wed 18 Nov |
 | Tech stack | Backend: Python 3.12+ / FastAPI + SQLAlchemy 2.0 (SQLite local, PostgreSQL 16 prod). Frontend: React 19 + TypeScript + Vite + Tailwind CSS v4. Hosting: AWS EC2 + Docker Compose + Caddy v2 (see §5) |
 | Live demo URL | https://16.170.212.120.sslip.io _(full-stack React SPA + FastAPI + PostgreSQL 16 over Let's Encrypt HTTPS on AWS EC2 `i-00ab50698f9435a50`; Swagger UI at `/api/docs`)_ |
-| Repo URL | https://github.com/voskalo/PidKlyuch (`main` has `backend/` + `frontend/`; `anton/infra-and-docs` merges `main` + `infra/` + `docs/`) |
+| Repo URL | https://github.com/voskalo/PidKlyuch (`main` has `backend/`, `frontend/`, `infra/`, `docs/` since PRs #1–#3; edge-case fixes via PR #4) |
 
 ---
 
@@ -181,7 +181,9 @@ PidKlyuch/
 │   │   ├── models/            # SQLAlchemy ORM models: user.py (User), calculation.py (Calculation)
 │   │   ├── services/          # auth_service.py, rates_service.py, calculation_service.py, history_service.py
 │   │   └── customs/           # pure Python engine: tax_rates.json, rules.py, models.py, calculators.py
-│   └── tests/                 # pytest (66 tests). Run: cd backend && .venv/bin/pytest
+│   └── tests/                 # pytest (122 tests). Run: cd backend && .venv/bin/pytest
+│                              #   test_edge_cases.py = hostile/boundary input (bad tokens, NaN, decimals, thresholds
+│                              #   after conversion, car year/engine bounds, signup race, CORS) + 17.11 regressions
 ├── frontend/                  # React 19 + TypeScript + Vite SPA (owner: Anna)
 │   ├── package.json           # React 19, TypeScript, Vite 8, Tailwind CSS v4, Lucide Icons
 │   ├── vite.config.ts         # dev server on port 5173 with proxy /api → http://127.0.0.1:8000
@@ -267,13 +269,19 @@ Money in responses is a **string with 2 decimals** (e.g. `"16.00"`), so no float
 
 **Sign-out** is client-side: delete the stored token (JWT is stateless).
 
+**Token rules (since 17.11):** no `Authorization` header → anonymous (allowed on `/api/calculate`). A header with an
+invalid or expired token → **401 on every endpoint, including `/api/calculate`**, so the client signs the user out
+instead of silently not saving to history. Retrying without the header works anonymously.
+
 **Notes for the frontend:**
 - Store the `access_token` in `localStorage` (`pidklyuch_access_token`) and send it on every request. `/api/calculate` works without it too, but then `calculation_id` is `null`.
 - On any `401`, clear the token and show sign-in.
 - CORS allows `http://localhost:5173` (Vite) and `http://localhost:3000` by default.
 
-**POST /api/auth/signup**: body `{"email": "a@b.com", "password": "min 8 chars", "name": "Anna"}` (`name` optional)
-→ `201 {"access_token": "...", "token_type": "bearer", "user": {"id": 1, "email": "a@b.com", "name": "Anna", "created_at": "ISO"}}`. `409` if duplicate email.
+**POST /api/auth/signup**: body `{"email": "a@b.com", "password": "8–128 chars", "name": "Anna"}` (`name` optional,
+max 100 chars, trimmed; blank → `null`; the email is trimmed and lowercased)
+→ `201 {"access_token": "...", "token_type": "bearer", "user": {"id": 1, "email": "a@b.com", "name": "Anna", "created_at": "ISO"}}`.
+`409` if the email is already registered.
 
 **POST /api/auth/signin**: body `{"email", "password"}` → `200`, same shape as signup. `401` on wrong credentials.
 
@@ -312,6 +320,15 @@ Response `200`:
  "notes": ["..."], "rates_version": "2026-11-16", "rates_verified_at": "2026-11-16",
  "calculation_id": 42}
 ```
+`line.code` ∈ `duty | excise | vat`. A parcel under the threshold has `lines: []`. `calculation_id` is `null`
+when the caller is not signed in. `rate_source` is `"fallback"` if NBU was unreachable, in which case `notes` says so
+and the UI should show a small warning. `formula` and `notes` are Ukrainian text, ready to display. The 422 body for
+a car missing `engine_volume_cc` / `battery_kwh` contains the reason in `detail[0].msg`. Since 17.11, 422 errors
+only describe the model chosen by `delivery_type` (before, a bad car also produced "Input should be 'parcel'"). An
+unknown `delivery_type` gives `detail[0].type == "union_tag_invalid"`. Prices accept at most 2 decimal places
+(`"150.005"` → 422), so the UI should round or limit input to cents.
+`rates_verified_at` = the date the tax rates were last checked against the law. Show it in the UI (e.g. "Ставки
+станом на 16.11.2026"). Parcels over €10,000 get a note that the result is only approximate.
 
 **POST /api/calculate/compare-rules**: same parcel body (`rules` ignored) → `{"current": <result>, "july_2027": <result>}`.
 
@@ -374,9 +391,14 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - [x] Deploy full-stack app (`db` + `backend` + `frontend` + `caddy`) on active AWS project `334177992228` (`eu-north-1`, EC2 `i-00ab50698f9435a50`, `https://16.170.212.120.sslip.io` verified `200 OK` across `/healthz`, `/api/health`, `/api/rates`, `/api/docs`, `/api/calculate`, `/api/stats`, and `/`).
 - [x] Fill in "How to run" and "How to deploy" in `README.md` (Anton + Liubomyr + Anna).
 - [x] Create user-testing script, Google Form questions, master tracker (`docs/user-testing-plan.md`), and Ukrainian recruiting templates (`docs/recruiting-messages.md`) (Anton).
-- [ ] Merge `anton/infra-and-docs` (PR #3) into `main` (team review / merge).
+- [x] Merge `anton/infra-and-docs` (PR #3) into `main` (merged 17.11).
+- [ ] **Redeploy the live site from `main` after the edge-case fixes are merged (18.11)**, so production gets the
+  3 backend bug fixes (car 422 messages, 401 on an invalid token for `/api/calculate`, 409 on a sign-up race) (Anton).
 - [ ] Schedule `cd backend && python scripts/check_law_updates.py` weekly and alert team on non-zero exit (Anton).
 - [ ] Run Wednesday user-testing sessions (15+ external testers, collect quotes, UX fixes, and donation screenshots) and write `docs/report.pdf` (all, Wed 18 – Thu 19 Nov).
+- [ ] Re-check by hand when the Cabinet sets the start date of the July 2027 parcel VAT (source `law_5025_ix`) (Liubomyr).
+- [ ] Optional: a "luggage" delivery type. The rules are already verified (Customs Code 374 p.1 and p.4) (Liubomyr).
+- [ ] Frontend: show a Ukrainian message after a 401 on calculate, and limit price inputs to 2 decimals (Anna).
 
 ---
 
