@@ -165,7 +165,8 @@ Applies to passenger vehicles (UKTZED heading `8703`) imported into Ukraine.
 | `engine_volume_cm3` ($E_{\text{cm3}}$) | `int` | Engine displacement in $\text{cm}^3$ (required for `petrol`, `diesel`, and `hybrid`) |
 | `battery_capacity_kwh` ($B_{\text{kWh}}$) | `Decimal` | Traction battery capacity in kWh (required for `electric`) |
 | `production_year` ($Y_{\text{prod}}$) | `int` | Vehicle manufacturing year (used with `current_year` $Y_{\text{curr}}$, default `2026`, to compute $K_{\text{age}}$) |
-| `origin` | `enum` | `"other"` (standard 10% duty) or `"eu"` (0% preferential duty under DCFTA **only** with EUR.1 / origin declaration) |
+| `origin` | `enum` | Country of ORIGIN (where the car was made): `eu`, `efta`, `uk`, `canada`, `israel` (0% in 2026 with proof of origin; UK from 01.04.2026), `uae` (2/3 of the normal rate from 01.07.2026), `other` (normal 10% / 5%), `unproven` (full rate 10%, MK 46 p.2). EVs 0% always |
+| `shipped_from` | `enum` | Country of DISPATCH: `origin` (default), `other` (preference lost, normal rate — direct transport rule), `russia` (import banned, Cabinet resolution 426) |
 | `is_new` | `bool?` | Optional. Customs Tariff "new" (never used). If omitted, a car made in the current year or later counts as new. Affects the 5% rate below and sets $K_{\text{age}} = 1$ |
 
 *(Note: Under ПКУ Art. 215.3.5-1, spark-ignition `hybrid` vehicles have no separate flat excise rate; they pay excise by their internal combustion engine displacement $E_{\text{cm3}}$ using the `petrol` base rate. Diesel hybrids should select `engine_type = "diesel"`.)*
