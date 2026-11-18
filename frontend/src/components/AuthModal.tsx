@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, Mail, Lock, User as UserIcon, AlertCircle, Loader2 } from 'lucide-react';
+import { X, Mail, Lock, User as UserIcon, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const GOOGLE_CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID || '').trim();
@@ -105,6 +105,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [mode, setMode] = useState<'signin' | 'signup'>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordConfirm, setPasswordConfirm] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -192,6 +193,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   if (!isOpen) return null;
 
+  // Live hint under "Повторіть пароль" (sign-up only): shown once the user starts typing it.
+  const confirmTyped = passwordConfirm.length > 0;
+  const passwordsMatch = password === passwordConfirm;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -206,10 +211,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
+    if (mode === 'signup' && password !== passwordConfirm) {
+      setError(
+        passwordConfirm
+          ? 'Паролі не збігаються. Введіть однаковий пароль в обидва поля'
+          : 'Повторіть пароль у другому полі',
+      );
+      return;
+    }
+
     try {
       setLoading(true);
       if (mode === 'signup') {
-        await signup(email, password, name || undefined);
+        await signup(email, password, passwordConfirm, name || undefined);
       } else {
         await signin(email, password);
       }
@@ -363,13 +377,67 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 type="password"
                 required
                 minLength={8}
+                autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setError(null);
+                }}
                 placeholder="••••••••"
                 className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
               />
             </div>
           </div>
+
+          {mode === 'signup' && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Повторіть пароль *
+              </label>
+              <div className="relative">
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <input
+                  type="password"
+                  required
+                  autoComplete="new-password"
+                  value={passwordConfirm}
+                  onChange={(e) => {
+                    setPasswordConfirm(e.target.value);
+                    setError(null);
+                  }}
+                  placeholder="••••••••"
+                  aria-invalid={confirmTyped && !passwordsMatch}
+                  aria-describedby="password-confirm-hint"
+                  className={`w-full pl-9 pr-3 py-2 text-sm border rounded-xl focus:outline-none focus:ring-2 ${
+                    confirmTyped && !passwordsMatch
+                      ? 'border-red-300 focus:ring-red-500/30 focus:border-red-500'
+                      : 'border-slate-200 focus:ring-blue-500/30 focus:border-blue-500'
+                  }`}
+                />
+              </div>
+              {confirmTyped && (
+                <p
+                  id="password-confirm-hint"
+                  aria-live="polite"
+                  className={`flex items-center gap-1 text-[11px] mt-1 ${
+                    passwordsMatch ? 'text-emerald-600' : 'text-red-600'
+                  }`}
+                >
+                  {passwordsMatch ? (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                      Паролі збігаються
+                    </>
+                  ) : (
+                    <>
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      Паролі не збігаються
+                    </>
+                  )}
+                </p>
+              )}
+            </div>
+          )}
 
           <button
             type="submit"
