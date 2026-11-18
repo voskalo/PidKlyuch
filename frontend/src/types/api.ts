@@ -1,4 +1,4 @@
-export type DeliveryType = 'parcel' | 'car';
+export type DeliveryType = 'parcel' | 'car' | 'excise';
 export type Currency = 'EUR' | 'USD' | 'UAH' | 'GBP' | 'PLN';
 export type RulesMode = 'current' | 'july_2027';
 export type ParcelSender = 'marketplace' | 'private';
@@ -29,7 +29,52 @@ export interface CarCalculateRequest {
   is_new?: boolean | null;
 }
 
-export type CalculateRequest = ParcelCalculateRequest | CarCalculateRequest;
+export type ExciseKindKey =
+  | 'beer'
+  | 'wine'
+  | 'sparkling_wine'
+  | 'spirits'
+  | 'cigarettes'
+  | 'cigars'
+  | 'smoking_tobacco'
+  | 'heated_tobacco'
+  | 'e_liquid'
+  | 'petrol'
+  | 'diesel';
+
+// Excise goods in one adult's luggage. Not for parcels: MK 235 bans alcohol/tobacco in parcels to private persons.
+export interface ExciseCalculateRequest {
+  delivery_type: 'excise';
+  kind: ExciseKindKey;
+  quantity: number; // in the kind's unit (l | ml | pcs | g)
+  item_price: number; // for the whole quantity
+  currency?: Currency;
+  abv?: number | null; // % vol, beer and spirits
+  weight_g?: number | null; // net weight, cigars and heated tobacco sticks
+  under_24h?: boolean;
+}
+
+export interface ExciseKind {
+  key: ExciseKindKey;
+  label: string;
+  group: 'alcohol' | 'tobacco' | 'e_liquid' | 'fuel';
+  unit: 'l' | 'ml' | 'pcs' | 'g';
+  allowance: string;
+  allowance_note: string;
+  abv_required: boolean;
+  abv_default: string | null;
+  abv_min: string | null;
+  abv_max: string | null;
+  weight_required: boolean;
+}
+
+export interface ExciseKindsResponse {
+  kinds: ExciseKind[];
+  allowance_groups_24h: string[];
+  notes: string[];
+}
+
+export type CalculateRequest = ParcelCalculateRequest | CarCalculateRequest | ExciseCalculateRequest;
 
 export interface TaxLine {
   code: 'duty' | 'excise' | 'vat';

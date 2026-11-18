@@ -3,6 +3,7 @@ import type {
   CalculateRequest,
   CalculationResult,
   CompareRulesResult,
+  ExciseKindsResponse,
   HistoryItem,
   ParcelCalculateRequest,
   RatesResponse,
@@ -38,6 +39,10 @@ const FIELD_UK: Record<string, string> = {
   item_price: 'Вартість товару',
   shipping_price: 'Вартість доставки',
   car_price: 'Вартість авто',
+  quantity: 'Кількість',
+  abv: 'Міцність',
+  weight_g: 'Вага нетто',
+  kind: 'Вид товару',
   engine_volume_cc: "Об'єм двигуна",
   battery_kwh: 'Ємність батареї',
   manufacture_year: 'Рік випуску',
@@ -52,6 +57,9 @@ const VALUE_ERROR_UK: [string, string][] = [
   ['Passwords do not match', 'Паролі не збігаються'],
   ['battery_kwh is required', 'Вкажіть ємність батареї електромобіля'],
   ['engine_volume_cc is required', "Вкажіть об'єм двигуна"],
+  ['is a whole number of pieces', 'Кількість штук має бути цілим числом'],
+  ['weight_g is required', 'Вкажіть вагу нетто в грамах'],
+  ['abv for', 'Міцність поза допустимими межами для цього напою'],
 ];
 
 interface ValidationErrorItem {
@@ -195,6 +203,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+  },
+
+  async getExciseKinds(): Promise<ExciseKindsResponse> {
+    return request<ExciseKindsResponse>('/api/excise/kinds');
   },
 
   async getRates(): Promise<RatesResponse> {

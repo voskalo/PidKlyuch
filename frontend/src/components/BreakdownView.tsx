@@ -74,7 +74,9 @@ export const BreakdownView: React.FC<BreakdownViewProps> = ({
               Безмитне ввезення — податки 0 грн!
             </h4>
             <p className="text-xs text-emerald-700 leading-relaxed">
-              {result.rules === 'july_2027'
+              {result.delivery_type === 'excise'
+                ? 'Кількість у межах безмитної норми на одну особу (ст. 376 МКУ) — мито, акциз і ПДВ не сплачуються.'
+                : result.rules === 'july_2027'
                 ? 'Ця посилка є подарунком від фізичної особи вартістю до €45, тому відповідно до нових правил не підлягає оподаткуванню.'
                 : 'Вартість товарів не перевищує митний ліміт €150 (ст. 374 МКУ). Мито та ПДВ не нараховуються.'}
             </p>
@@ -213,7 +215,7 @@ export const BreakdownView: React.FC<BreakdownViewProps> = ({
               {onOpenAuth && (
                 <button
                   onClick={onOpenAuth}
-                  className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:text-blue-700 hover:underline"
+                  className="inline-flex items-center gap-1 py-1.5 px-1 -my-1.5 font-semibold text-blue-600 hover:text-blue-700 hover:underline"
                 >
                   <LogIn className="w-3.5 h-3.5" />
                   Увійти

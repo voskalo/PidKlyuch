@@ -5,6 +5,7 @@ import {
   History,
   Trash2,
   Package,
+  Luggage,
   Car,
   ChevronDown,
   ChevronUp,
@@ -13,6 +14,10 @@ import {
   Calendar,
 } from 'lucide-react';
 import { BreakdownView } from './BreakdownView';
+import { KIND_UI } from '../constants/excise';
+import type { ExciseKindKey } from '../types/api';
+
+const ENGINE_UK: Record<string, string> = { petrol: 'бензин', diesel: 'дизель', hybrid: 'гібрид', electric: 'електро' };
 
 interface HistoryViewProps {
   onGoToCalculator: () => void;
@@ -131,6 +136,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onGoToCalculator }) =>
       <div className="space-y-3">
         {items.map((item) => {
           const isCar = item.delivery_type === 'car';
+          const isExcise = item.delivery_type === 'excise';
+          const exciseUi = isExcise ? KIND_UI[item.input.kind as ExciseKindKey] : undefined;
           const isExpanded = expandedId === item.id;
           const isDeleting = deletingId === item.id;
           const dateStr = new Date(item.created_at).toLocaleString('uk-UA', {
@@ -155,15 +162,17 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onGoToCalculator }) =>
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
                     isCar
                       ? 'bg-purple-100 text-purple-700'
+                      : isExcise
+                      ? 'bg-amber-100 text-amber-700'
                       : 'bg-blue-100 text-blue-700'
                   }`}>
-                    {isCar ? <Car className="w-5 h-5" /> : <Package className="w-5 h-5" />}
+                    {isCar ? <Car className="w-5 h-5" /> : isExcise ? <Luggage className="w-5 h-5" /> : <Package className="w-5 h-5" />}
                   </div>
 
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-bold text-slate-900 text-sm">
-                        {isCar ? 'Розмитнення автомобіля' : 'Розмитнення посилки'}
+                        {isCar ? 'Розмитнення автомобіля' : isExcise ? 'Підакцизні товари в багажі' : 'Розмитнення посилки'}
                       </span>
                       <span className="text-[11px] font-medium text-slate-400 flex items-center gap-1">
                         <Calendar className="w-3 h-3" />
@@ -175,7 +184,14 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onGoToCalculator }) =>
                       {isCar ? (
                         <>
                           Ціна: {String(item.input.car_price || '')} {String(item.input.currency || 'EUR')} • Двигун:{' '}
-                          {String(item.input.engine_type || '')} • Рік: {String(item.input.manufacture_year || '')}
+                          {ENGINE_UK[String(item.input.engine_type)] ?? String(item.input.engine_type || '')} • Рік:{' '}
+                          {String(item.input.manufacture_year || '')}
+                        </>
+                      ) : isExcise ? (
+                        <>
+                          {exciseUi?.short ?? String(item.input.kind || '')}: {String(item.input.quantity || '')}{' '}
+                          {exciseUi?.unit ?? ''} • Ціна: {String(item.input.item_price || '')}{' '}
+                          {String(item.input.currency || 'EUR')}
                         </>
                       ) : (
                         <>
