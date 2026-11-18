@@ -862,6 +862,10 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **How to verify / run:** `cd backend && .venv/bin/pytest` (215 passed); `.venv/bin/python scripts/check_law_updates.py`
   (21 `[ok]`); `cd frontend && npx tsc -b && npm run lint && npm run build`; scratch Playwright: UI suite 73/73, mobile audit clean.
 - **Not done / known problems / next steps:** see §11 (several kinds per calculation, liqueurs/cider, EU preferences).
+- **Deployed 18.11 (night):** PR #9 merged (`3331191`), deploy run 44355562135 green. Verified live: `/api/excise/kinds`
+  lists 11 kinds; cigars without weight → 422; 2 l whisky 40 % €60 → €7.30 at the live NBU rate (1 more anonymous test
+  calculation — 3 test calculations today in total, subtract them in the report); bundle has the new tab and texts; the
+  iOS-zoom CSS rule is live.
 
 ---
 
