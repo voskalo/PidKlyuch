@@ -4,7 +4,16 @@ export type RulesMode = 'current' | 'july_2027';
 export type ParcelSender = 'marketplace' | 'private';
 
 export type EngineType = 'petrol' | 'diesel' | 'hybrid' | 'electric';
-export type CarOrigin = 'eu' | 'other';
+// Country of ORIGIN (where the car was made) decides the duty; country of DISPATCH is a separate field.
+export type CarOrigin = 'eu' | 'efta' | 'uk' | 'canada' | 'israel' | 'uae' | 'other' | 'unproven';
+export type ShippedFrom = 'origin' | 'other' | 'russia';
+
+export interface CarOriginOption {
+  key: CarOrigin;
+  label: string;
+  badge: string;
+  hint: string;
+}
 
 export interface ParcelCalculateRequest {
   delivery_type: 'parcel';
@@ -25,6 +34,7 @@ export interface CarCalculateRequest {
   battery_kwh?: number | null;
   manufacture_year: number;
   origin?: CarOrigin;
+  shipped_from?: ShippedFrom;
   // Customs Tariff "new" (never used). Omitted: a car made this year counts as new.
   is_new?: boolean | null;
 }
