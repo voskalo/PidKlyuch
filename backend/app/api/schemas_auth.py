@@ -1,12 +1,23 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, ValidationInfo, field_validator
 
 
 class SignUpIn(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
+    # The sign-up form asks for the password twice. Compared exactly (no trimming, case-sensitive),
+    # so a typo cannot create an account the user then cannot sign in to.
+    password_confirm: str
     name: str | None = Field(default=None, max_length=100)
+
+    @field_validator("password_confirm")
+    @classmethod
+    def _passwords_match(cls, v: str, info: ValidationInfo) -> str:
+        password = info.data.get("password")  # absent if the password itself failed validation
+        if password is not None and v != password:
+            raise ValueError("Passwords do not match")
+        return v
 
     @field_validator("name")
     @classmethod
