@@ -31,7 +31,10 @@ class CarIn(BaseModel):
     engine_volume_cc: int | None = Field(default=None, gt=0, le=10_000)
     battery_kwh: Decimal | None = Field(default=None, gt=0, le=500)
     manufacture_year: int = Field(ge=1950, le=Date.today().year + 1)
-    origin: Literal["eu", "other"] = "other"
+    # Country of ORIGIN (where the car was made) — decides the duty; see GET /api/car/origins
+    origin: Literal["eu", "efta", "uk", "canada", "israel", "uae", "other", "unproven"] = "other"
+    # Country of DISPATCH (a separate term): a free-trade preference needs shipment from the partner; russia = banned
+    shipped_from: Literal["origin", "other", "russia"] = "origin"
     # Customs Tariff "new" (never used). Optional: if omitted, a car made this year or later counts as new.
     is_new: bool | None = None
 
@@ -41,6 +44,8 @@ class CarIn(BaseModel):
             raise ValueError("battery_kwh is required for electric cars")
         if self.engine_type in ("petrol", "diesel", "hybrid") and self.engine_volume_cc is None:
             raise ValueError("engine_volume_cc is required for petrol, diesel and hybrid cars")
+        if self.shipped_from == "russia":
+            raise ValueError("import of goods shipped from or through russia is banned (Cabinet resolution 426)")
         return self
 
 
@@ -111,6 +116,13 @@ class CalculationOut(BaseModel):
 class CompareRulesOut(BaseModel):
     current: CalculationOut
     july_2027: CalculationOut
+
+
+class CarOriginOut(BaseModel):
+    key: str
+    label: str
+    badge: str  # duty today for a typical car (10% line), e.g. "0%", "6.7%", "10%"
+    hint: str
 
 
 class ExciseKindOut(BaseModel):

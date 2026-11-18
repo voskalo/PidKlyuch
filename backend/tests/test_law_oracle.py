@@ -50,15 +50,21 @@ def oracle_parcel(g: D, rules: str, sender: str) -> dict:
     return out
 
 
-def oracle_car(price, ship, engine, cc, kwh, year, origin, is_new) -> dict:
+def oracle_car(price, ship, engine, cc, kwh, year, origin, is_new, shipped="origin") -> dict:
     cv = price + ship
     new = is_new if is_new is not None else year >= Y
-    if engine == "electric" or origin == "eu":
+    # origin decides the column (MK 280, 46); a free-trade preference needs dispatch from the partner
+    normal = D("0.05") if engine in ("petrol", "hybrid") and cc > 3000 and new else D("0.10")
+    if engine == "electric":
         rate = D(0)
-    elif engine in ("petrol", "hybrid") and cc > 3000 and new:
-        rate = D("0.05")
-    else:
-        rate = D("0.10")
+    elif origin == "unproven":
+        rate = D("0.10")  # full rate
+    elif origin == "other" or shipped == "other":
+        rate = normal
+    elif origin == "uae":
+        rate = {D("0.10"): D("0.067"), D("0.05"): D("0.033")}[normal]
+    else:  # eu, efta, uk, canada, israel: 0% in 2026
+        rate = D(0)
     duty = c(cv * rate)
     if engine == "electric":
         excise = c(D(str(kwh)) * 1)
@@ -109,7 +115,9 @@ def gen_car(r):
     if r.random() < 0.8:
         body["shipping_price"] = rnd_amount(r, ["0", "800", "1200"])
     if r.random() < 0.8:
-        body["origin"] = r.choice(["eu", "other"])
+        body["origin"] = r.choice(["eu", "efta", "uk", "canada", "israel", "uae", "other", "unproven"])
+    if r.random() < 0.5:
+        body["shipped_from"] = r.choice(["origin", "other"])
     if r.random() < 0.6:
         body["is_new"] = r.choice([True, False, None])
     if engine == "electric":
@@ -130,7 +138,7 @@ def expected(body):
     price = eur(D(body["car_price"]), cur)
     return price, ship, oracle_car(price, ship, body["engine_type"], body.get("engine_volume_cc"),
                                    body.get("battery_kwh"), body["manufacture_year"], body.get("origin", "other"),
-                                   body.get("is_new"))
+                                   body.get("is_new"), body.get("shipped_from", "origin"))
 
 
 def test_engine_matches_independent_oracle(client):

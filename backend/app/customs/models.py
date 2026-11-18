@@ -18,8 +18,22 @@ class EngineType(str, Enum):
 
 
 class Origin(str, Enum):
+    """Country of ORIGIN (where the car was made, MK 36) — decides the duty column."""
     EU = "eu"
-    OTHER = "other"
+    EFTA = "efta"
+    UK = "uk"
+    CANADA = "canada"
+    ISRAEL = "israel"
+    UAE = "uae"
+    OTHER = "other"  # WTO / most-favoured-nation country (USA, Japan, Korea, China, Turkey, ...): normal rate
+    UNPROVEN = "unproven"  # origin not established: full rate (MK 46 p.2)
+
+
+class ShippedFrom(str, Enum):
+    """Country of DISPATCH (where the car is shipped to Ukraine from) — a separate term from origin."""
+    ORIGIN = "origin"  # from the origin country / agreement area: preferences can apply
+    OTHER = "other"  # from a third country: free-trade preference lost (direct transport rule)
+    RUSSIA = "russia"  # from or through russia: import banned (Cabinet resolution 426)
 
 
 class Sender(str, Enum):
@@ -44,6 +58,7 @@ class CarInput:
     engine_volume_cc: int | None = None
     battery_kwh: Decimal | None = None
     is_new: bool | None = None  # never used before (Customs Tariff "нові"); None = derive from manufacture_year
+    shipped_from: ShippedFrom = ShippedFrom.ORIGIN
 
 
 @dataclass(frozen=True)

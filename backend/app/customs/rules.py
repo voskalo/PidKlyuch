@@ -62,11 +62,31 @@ class DutyException:
 
 
 @dataclass(frozen=True)
+class PreferentialOrigin:
+    """A free-trade agreement rate for cars originating in a partner country (Customs Tariff preferential column)."""
+    key: str
+    label: str
+    agreement: str
+    proof: str
+    valid_from: date
+    valid_to: date | None
+    rate: Decimal | None = None  # a flat rate, e.g. 0 (EU 2026), or ...
+    mfn_rate_map: dict[Decimal, Decimal] | None = None  # ... a rate per normal (MFN) rate, e.g. UAE 10% -> 6.7%
+
+    def rate_for(self, mfn_rate: Decimal) -> Decimal:
+        if self.rate is not None:
+            return self.rate
+        if mfn_rate in self.mfn_rate_map:
+            return self.mfn_rate_map[mfn_rate]
+        return mfn_rate  # no reduction known for this line: normal rate
+
+
+@dataclass(frozen=True)
 class CarRules:
     key: str
     title: str
-    duty_rate_eu: Decimal
-    duty_rate_other: Decimal
+    duty_rate_other: Decimal  # normal ("пільгова") rate for WTO / most-favoured-nation origin
+    duty_rate_full: Decimal  # full ("повна") rate: origin not established (MK 46 p.2) or no MFN treatment
     electric_duty_rate: Decimal
     vat_rate: Decimal
     excise_base: dict[str, ExciseBase]  # "petrol" | "diesel"
@@ -75,7 +95,8 @@ class CarRules:
     # K_age = full calendar years from the year AFTER manufacture to the current year, clamped
     age_coef_min: int
     age_coef_max: int
-    duty_exceptions: tuple[DutyException, ...] = ()  # apply to non-EU-origin, non-electric cars
+    duty_exceptions: tuple[DutyException, ...] = ()  # lower normal rates for some lines (non-electric cars)
+    preferential_origins: dict[str, PreferentialOrigin] = field(default_factory=dict)
     notes: tuple[str, ...] = ()
     sources: tuple[str, ...] = ()
 
@@ -174,6 +195,18 @@ def _parcel(key: str, r: dict) -> ParcelRules:
     )
 
 
+def _pref_origin(key: str, r: dict) -> PreferentialOrigin:
+    if ("rate" in r) == ("mfn_rate_map" in r):
+        raise ValueError(f"preferential origin {key}: needs exactly one of 'rate' or 'mfn_rate_map'")
+    return PreferentialOrigin(
+        key=key, label=r["label"], agreement=r["agreement"], proof=r["proof"],
+        valid_from=date.fromisoformat(r["valid_from"]),
+        valid_to=date.fromisoformat(r["valid_to"]) if r.get("valid_to") else None,
+        rate=_d(r["rate"]) if "rate" in r else None,
+        mfn_rate_map={_d(k): _d(v) for k, v in r["mfn_rate_map"].items()} if "mfn_rate_map" in r else None,
+    )
+
+
 def _car(key: str, r: dict) -> CarRules:
     excise = {
         fuel: ExciseBase(up_to_cc=int(v["up_to_cc"]), small=_d(v["small"]), large=_d(v["large"]))
@@ -184,8 +217,9 @@ def _car(key: str, r: dict) -> CarRules:
     return CarRules(
         key=key,
         title=r["title"],
-        duty_rate_eu=_d(r["duty_rate_eu"]),
         duty_rate_other=_d(r["duty_rate_other"]),
+        duty_rate_full=_d(r["duty_rate_full"]),
+        preferential_origins={k: _pref_origin(k, v) for k, v in r.get("preferential_origins", {}).items()},
         electric_duty_rate=_d(r["electric_duty_rate"]),
         vat_rate=_d(r["vat_rate"]),
         excise_base=excise,
