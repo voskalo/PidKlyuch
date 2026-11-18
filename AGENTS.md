@@ -115,8 +115,8 @@ Submit:
 |---|---|---|
 | Repo organised with top-level `backend/`, `frontend/`, `infra/` and a `README.md` that tells a stranger what the product is and how to run and deploy it | 3 | ✅ `backend/`, `frontend/`, `infra/`, `docs/`, and `README.md` complete |
 | Working prototype with sign-in: deployed, reachable over **HTTPS**, users can **sign up and sign in** | 3 | ✅ Live at `https://16.170.212.120.sslip.io` (AWS EC2 `i-00ab50698f9435a50`, Let's Encrypt HTTPS + React + FastAPI + Postgres 16) |
-| Report with user feedback: who you showed it to, how many tried it, what they said, **what you changed because of it** | 4 | ✅ 15 external testers (`T-01`–`T-15`, `docs/feedback/responces.csv`), 86.7% completion, 4.07/5.0 clarity, UX/auth/infra fixes mapped in `docs/report.md` & `docs/PidKlyuch-Report.pdf` |
-| **Bonus:** users ready to pay real money (donation to a volunteer cause, or a working payment in the product), with **evidence in the report** | bonus | 🟡 14/15 (93.3%) positive: 3 declared already donated + 11 ready to donate 20–100 UAH (`docs/feedback/responces.csv`); no screenshot files uploaded yet |
+| Report with user feedback: who you showed it to, how many tried it, what they said, **what you changed because of it** | 4 | ✅ 15 external testers (`T-01`–`T-15`, `docs/feedback/responses.csv`), 86.7% completion, 4.07/5.0 clarity, UX/auth/infra fixes mapped in `docs/report.md` & `docs/PidKlyuch-Report.pdf` |
+| **Bonus:** users ready to pay real money (donation to a volunteer cause, or a working payment in the product), with **evidence in the report** | bonus | 🟡 14/15 (93.3%) positive: 3 declared already donated + 11 ready to donate 20–100 UAH (`docs/feedback/responses.csv`); no screenshot files uploaded yet |
 
 **Demo MVP scope (must have by Wed evening):**
 - Sign up, sign in, sign out.
@@ -228,7 +228,7 @@ PidKlyuch/
 │   └── README.md              # Deployment architecture, full-stack & fallback modes, AWS EC2 HTTPS guide
 └── docs/                      # Customs spec, user-testing docs, report (owner: Anton)
     ├── customs-rules.md       # Locked Ukrainian customs spec (parcels, cars, NBU rates, 10 test cases)
-    ├── feedback/responces.csv # Exported Google Form responses from 15 external testers (T-01..T-15)
+    ├── feedback/responses.csv # Exported Google Form responses from 15 external testers (T-01..T-15)
     ├── PidKlyuch-Report.pdf   # Final 5-page English OOAD project report PDF (generated from docs/report.md)
     ├── recruiting-messages.md # Ukrainian outreach templates for Telegram/FB/DMs (15+ testers)
     ├── report.md              # Final English OOAD project report (architecture, 15-tester cohort, changes, willingness to pay)
@@ -994,7 +994,7 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 ### 2026-11-18 21:10: Rewrite final OOAD report in English & remove future roadmap (`docs/report.md`, `docs/PidKlyuch-Report.pdf`)
 - **Who:** Anton Vertyporoh via Antigravity CLI
 - **Area:** docs
-- **What was done:** Rewrote `docs/report.md` in academic English (preserving verbatim Ukrainian tester quotes from `docs/feedback/responces.csv`), removed the future-roadmap section, audited all branches (`origin/deploy` at `13d7b04`, PRs `#1`–`#10`) so every implemented feature and automated `deploy` workflow is accurately documented, and regenerated `docs/PidKlyuch-Report.pdf` (5 A4 pages, 106,924 bytes) via WeasyPrint 70.0. Visually verified all 5 rendered pages with `pypdfium2`.
+- **What was done:** Rewrote `docs/report.md` in academic English (preserving verbatim Ukrainian tester quotes from `docs/feedback/responses.csv`), removed the future-roadmap section, audited all branches (`origin/deploy` at `13d7b04`, PRs `#1`–`#10`) so every implemented feature and automated `deploy` workflow is accurately documented, and regenerated `docs/PidKlyuch-Report.pdf` (5 A4 pages, 106,924 bytes) via WeasyPrint 70.0. Visually verified all 5 rendered pages with `pypdfium2`.
 - **Files touched:** `docs/report.md` (modified), `docs/PidKlyuch-Report.pdf` (modified), `AGENTS.md` (§6, §12)
 - **Decisions & why:** English report matches course submission norms while retaining exact Ukrainian quotes for evidence integrity; tightened layout to 5 full pages with no orphan trailing section.
 - **How to verify / run:** Open `docs/PidKlyuch-Report.pdf` (5 pages) and `docs/report.md`.

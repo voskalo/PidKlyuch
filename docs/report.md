@@ -63,7 +63,7 @@ Moderated and asynchronous user-testing sessions were conducted on **17–18 Nov
 
 - Ukrainian online shopping Telegram groups (AliExpress, Amazon, iHerb, parcel forwarders);
 - Car import communities (EU/US vehicle sourcing and customs clearance chats);
-- Student channels and direct outreach linked to the structured Google Form (`docs/feedback/responces.csv`).
+- Student channels and direct outreach linked to the structured Google Form (`docs/feedback/responses.csv`).
 
 In total, **N = 15 unique external testers (`T-01`–`T-15`)** submitted feedback:
 
@@ -121,7 +121,7 @@ Every concrete issue surfaced by testers on 18 November 2026 was traced to its r
 
 ## 5. Willingness to Pay & Real-World Traction (Bonus Criterion)
 
-To validate whether users value PidKlyuch beyond polite feedback, we included a voluntary volunteer-donation modal (`DonationModal.tsx` linking to Come Back Alive, Serhiy Prytula Foundation, and Monobank) and asked about donation behavior in Q5 of the survey (`docs/feedback/responces.csv`):
+To validate whether users value PidKlyuch beyond polite feedback, we included a voluntary volunteer-donation modal (`DonationModal.tsx` linking to Come Back Alive, Serhiy Prytula Foundation, and Monobank) and asked about donation behavior in Q5 of the survey (`docs/feedback/responses.csv`):
 
 | Survey Response (Q5) | Count | Share | Tester IDs |
 |---|---|---|---|
@@ -132,7 +132,7 @@ To validate whether users value PidKlyuch beyond polite feedback, we included a 
 
 **Transparency on Evidence & Live Usage Metrics:**
 
-- **Donation screenshots:** While 3 respondents (`T-04`, `T-05`, `T-06`) reported having already donated, column 8 (screenshot URL) in `docs/feedback/responces.csv` was left blank and no image files were uploaded to `docs/assets/`. We therefore report **3 self-reported donations without uploaded screenshots** alongside **11 explicit commitments to donate 20–100 UAH** on real orders.
+- **Donation screenshots:** While 3 respondents (`T-04`, `T-05`, `T-06`) reported having already donated, column 8 (screenshot URL) in `docs/feedback/responses.csv` was left blank and no image files were uploaded to `docs/assets/`. We therefore report **3 self-reported donations without uploaded screenshots** alongside **11 explicit commitments to donate 20–100 UAH** on real orders.
 - **Production `/api/stats` snapshot (`https://16.170.212.120.sslip.io/api/stats`, 18 Nov 2026 20:55):**
   - **77** total saved calculations in PostgreSQL (**73** user calculations after subtracting **4** documented anonymous verification runs by the team);
   - **4** registered user accounts (most testers evaluated the calculator anonymously or tested before Google Sign-In was deployed);
