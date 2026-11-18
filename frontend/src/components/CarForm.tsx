@@ -195,7 +195,7 @@ export const CarForm: React.FC<CarFormProps> = ({ onCalculated, onError }) => {
               placeholder="10000"
               className="flex-1 min-w-0 px-3.5 py-2.5 text-base font-bold text-slate-900 focus:outline-none"
             />
-            <div className="relative shrink-0 border-l border-slate-200 bg-slate-100/90 min-w-[88px]">
+            <div className="relative shrink-0 border-l border-slate-200 bg-slate-100/90 min-w-[100px] lg:min-w-[88px]">
               <select
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value as Currency)}

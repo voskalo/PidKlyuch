@@ -143,7 +143,7 @@ Update the Status column above when a criterion is met.
 | Backend language/framework | **Python 3.12+ / FastAPI** | `backend/`, entry point `app.main:app` (uvicorn on `$PORT`, default `8000`, `--proxy-headers`) |
 | ORM / Database | **SQLAlchemy 2.0**: SQLite locally, **PostgreSQL 16** in prod | Set via `DATABASE_URL` (`postgres:16-alpine` in Compose or AWS RDS Postgres); tables auto-created on startup via `init_db()` |
 | Auth method | **JWT bearer tokens** (PyJWT, HS256) + optional **Google Sign-In** (GIS ID tokens) | Passwords hashed with stdlib PBKDF2-SHA256 (`390,000` iterations); Google ID tokens verified via `google-auth` (`POST /api/auth/google`) |
-| Tests | **pytest** + FastAPI `TestClient` | `cd backend && .venv/bin/pytest` (164 tests passing on `liubomyr/verify-tax-rules`) |
+| Tests | **pytest** + FastAPI `TestClient` | `cd backend && .venv/bin/pytest` (215 tests passing) |
 | Frontend framework | **React 19 / TypeScript / Vite 8 / Tailwind CSS v4** | `frontend/`, Lucide Icons, dev proxy `/api` → `127.0.0.1:8000`; built with Node 22 and served on `:80` behind Caddy in prod |
 | Hosting (backend & frontend) | **AWS EC2 (Ubuntu 24.04)** + **Docker Compose + Caddy v2** (automatic HTTPS) | Single HTTPS origin via `<EC2-IP>.sslip.io` (Let's Encrypt TLS); `/api/*` → `backend:8000`, `/*` → `frontend:80` |
 | Database (prod) | **PostgreSQL 16** (Docker Compose `db` or **AWS RDS for PostgreSQL**) | Set via `DATABASE_URL` (`?sslmode=require` if using RDS; never SQLite in prod) |
@@ -184,7 +184,8 @@ PidKlyuch/
 │   │   ├── models/            # SQLAlchemy ORM models: user.py (User), calculation.py (Calculation)
 │   │   ├── services/          # auth_service.py, rates_service.py, calculation_service.py, history_service.py
 │   │   └── customs/           # pure Python engine: tax_rates.json, rules.py, models.py, calculators.py
-│   └── tests/                 # pytest (164 tests). Run: cd backend && .venv/bin/pytest
+│   └── tests/                 # pytest (215 tests). Run: cd backend && .venv/bin/pytest
+│                              #   test_excise.py = excise goods in luggage, hand-checked cases + API validation
 │                              #   test_edge_cases.py = hostile/boundary input (bad tokens, NaN, decimals, thresholds
 │                              #   after conversion, car year/engine bounds, signup race, CORS) + 17.11 regressions
 │                              #   test_law_oracle.py = the law re-implemented independently, compared with the API on
@@ -205,7 +206,8 @@ PidKlyuch/
 │       │                      #   errors (detail strings, 422 lists, network failure) into Ukrainian
 │       ├── utils/amount.ts    # parseAmount(): price input check mirroring the API limits (0…10 000 000, cents)
 │       ├── context/AuthContext.tsx # React AuthProvider (user state, login/signup/logout, token storage)
-│       └── components/        # Navbar, RatesBar, ParcelForm, CarForm, BreakdownView, CompareRulesModal, HistoryView, AuthModal, DonationModal, StatsModal, Footer
+│       ├── constants/excise.ts # icons, short labels, demo defaults for the 11 excise kinds (presentation only)
+│       └── components/        # Navbar, RatesBar, ParcelForm, CarForm, ExciseForm, BreakdownView, CompareRulesModal, HistoryView, AuthModal, DonationModal, StatsModal, Footer
 ├── .github/workflows/ci-cd.yml # CI on every push/PR (backend pytest + frontend build); push to `deploy` → auto-deploy to EC2
 ├── infra/                     # Docker, deployment configs, Caddy HTTPS proxy (owner: Anton)
 │   ├── deploy_key.pub         # PUBLIC half of the GitHub Actions deploy key (goes into the server's authorized_keys)
@@ -283,6 +285,7 @@ Money in responses is a **string with 2 decimals** (e.g. `"16.00"`), so no float
 | ✅ | GET | `/api/auth/me` | required | current user |
 | ✅ | POST | `/api/calculate` | optional | calculate landed price; saved to history if signed in |
 | ✅ | POST | `/api/calculate/compare-rules` | – | parcel: current rules vs July 2027 rules |
+| ✅ | GET | `/api/excise/kinds` | – | excise goods the luggage form offers: unit, duty-free norm, needs ABV / weight |
 | ✅ | GET | `/api/rates` | – | NBU rates used for conversion |
 | ✅ | GET | `/api/history` | required | user's saved calculations, newest first |
 | ✅ | DELETE | `/api/history/{id}` | required | delete one saved calculation |
@@ -359,6 +362,22 @@ unknown `delivery_type` gives `detail[0].type == "union_tag_invalid"`. Prices ac
 станом на 16.11.2026"). Parcels over €10,000 get a note that the result is only approximate.
 
 **POST /api/calculate/compare-rules**: same parcel body (`rules` ignored) → `{"current": <result>, "july_2027": <result>}`.
+
+**Excise goods in luggage (since 18.11)**: `POST /api/calculate` with
+```json
+{"delivery_type": "excise", "kind": "spirits", "quantity": 2, "abv": 40, "item_price": 60, "currency": "EUR", "under_24h": false}
+```
+- `kind`: `beer | wine | sparkling_wine | spirits | cigarettes | cigars | smoking_tobacco | heated_tobacco | e_liquid | petrol | diesel`
+- `quantity` (> 0, ≤ 100000, ≤ 3 decimals) in the kind's unit: litres (alcohol, fuel), ml (e-liquid), pieces (cigarettes,
+  cigars, heated sticks — whole numbers), grams (smoking tobacco). `item_price` = price for the whole quantity.
+- `abv` (% vol) for `beer` (0.5–15, default 5) and `spirits` (22.1–96, default 40); `weight_g` (net) required for `cigars`
+  and `heated_tobacco`; `under_24h`: abroad < 24 h → no allowance for alcohol and tobacco (MK 376 p.3).
+- Response: the usual `CalculationOut` (`rules: "current"`, `shipping_eur: "0.00"`); `lines` empty when the quantity is
+  within the duty-free norm. Only the quantity above the norm is taxed, with its share of the price.
+- NOT for parcels: alcohol, tobacco and e-liquids to private persons are banned in post/express (MK 235); the notes say so.
+
+**GET /api/excise/kinds** → `{"kinds": [{"key", "label", "group", "unit", "allowance", "allowance_note", "abv_required",
+"abv_default", "abv_min", "abv_max", "weight_required"}], "allowance_groups_24h": ["alcohol", "tobacco"], "notes": [...]}`.
 
 **GET /api/rates** → `{"date": "2026-11-16", "source": "nbu" | "fallback", "uah_per_unit": {"UAH": "1", "EUR": "50.222", "USD": "45.4274", "GBP": "60.106", "PLN": "11.3916"}}`.
 
@@ -448,6 +467,7 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - [x] Frontend: Ukrainian messages for 401/422/network errors and 2-decimal price handling (done 18.11 by Liubomyr, see §12).
 - [x] Frontend: "Нове авто" checkbox in `CarForm.tsx` that sends `is_new` (done 18.11 by Liubomyr, see §12).
 - [ ] In January 2027, re-check the EU-origin car duty rate for 2027 (source `dcfta_car_duty`) (Liubomyr).
+- [ ] Optional: excise goods — several kinds in one calculation, liqueurs 15–22% ("проміжні продукти", 12.23 грн/л), cider, EU-origin duty preferences (Liubomyr).
 - [ ] Optional: model range-extender EVs (8703 80 x0 90: 8% duty, flat €100 excise, TC 215.3.5-1) as their own engine type; today the UI only warns (Liubomyr).
 
 ---
@@ -808,6 +828,41 @@ Format: `YYYY-MM-DD: decision: reason (who)`
   2.0 → excise "75 € × 2 л × 1 (коеф. віку, нове авто) = 150.00" (1 more anonymous test calculation saved — 2 in total
   today, subtract them in the report); live bundle has the new texts and no "Категорія товару".
 
+
+### 2026-11-18 (night): Excise goods calculator (luggage) + mobile layout fixes
+- **Who:** Liubomyr Voskalo via Claude Code (Opus 5.5)
+- **Area:** backend + frontend (cross-area: Anna's components — new `ExciseForm.tsx`, edits in `App.tsx`, `Navbar.tsx`,
+  `AuthModal.tsx`, `StatsModal.tsx`, `BreakdownView.tsx`, `HistoryView.tsx`, `ParcelForm.tsx`, `CarForm.tsx`, `RatesBar.tsx`,
+  `Footer.tsx`, `index.css`)
+- **What was done:**
+  - Legal finding (see §13 "Excise goods"): excise goods are taxed differently (MK 234 p.6, no €150 threshold), and
+    alcohol/tobacco/e-liquids may not be sent to private persons by post or courier at all (MK 235 p.1 items 6–7). So the
+    new calculator is for **luggage**: 11 kinds (beer, wine, sparkling wine, spirits, cigarettes, cigars, smoking
+    tobacco, heated sticks, e-liquids, petrol, diesel) with MK 376 norms, the 24-hour rule, 2026/2027 excise schedules,
+    Customs Tariff duty and VAT.
+  - Backend: `excise_rule_sets` + 10 new watched sources in `tax_rates.json` (watcher: 21 clauses, all fingerprinted);
+    `ExciseRate`/`ExciseKind`/`ExciseRules` + loader in `rules.py`; `ExciseInput` (models), `ExciseCalculator`
+    (calculators); `ExciseIn` in the `CalculationIn` union; `GET /api/excise/kinds`; parcel notes now state the MK 235 ban.
+    `tests/test_excise.py` (42 tests, hand-checked values).
+  - Frontend: third tab "Підакцизні в багажі" (short labels + stacked icons on phones), `ExciseForm.tsx` in the site's
+    style (kind cards grouped Алкоголь / Тютюн / Рідини та пальне, quantity with unit, ABV / net weight when needed,
+    price + currency, "< 24 годин" checkbox, amber postal-ban box), result banner and history row for excise.
+  - Mobile audit (Playwright, 320/360/375/414/768/1280 px, all tabs, results and modals) and fixes: navbar overflowed at
+    768 px (Sign-in/Sign-up off-screen) → desktop nav from `lg`; iOS zoom on focus (fields 12–14 px) → 16 px fields on
+    touch / < 1024 px (`index.css`); sign-up and stats modals cut off on short/landscape phones → `max-h` + inner scroll;
+    stats card text clipped at 320 px; tap targets under 24 px (rates refresh, "Що це означає?", "Увійти", footer and
+    auth links) enlarged. Audit after fixes: no overflow, no clipping, no small fields/targets.
+- **Files touched:** `backend/app/{customs/tax_rates.json,customs/rules.py,customs/models.py,customs/calculators.py,
+  api/schemas_calc.py,api/calculate.py,services/calculation_service.py}`, `backend/tests/test_excise.py` (new),
+  `frontend/src/{App.tsx,index.css,types/api.ts,services/api.ts,constants/excise.ts (new),components/ExciseForm.tsx (new),
+  components/*.tsx listed above}`, `docs/customs-rules.md` (§6), `README.md`, `AGENTS.md` (§6, §8, §11, §12, §13).
+- **Decisions & why:** luggage instead of parcels, because the law bans these goods in parcels to private persons; units,
+  norms and field requirements are served by the backend (`/api/excise/kinds`) so the form never disagrees with the
+  rates file; heated sticks and e-liquids get no allowance (MK 376 does not name them) — stated in the UI.
+- **How to verify / run:** `cd backend && .venv/bin/pytest` (215 passed); `.venv/bin/python scripts/check_law_updates.py`
+  (21 `[ok]`); `cd frontend && npx tsc -b && npm run lint && npm run build`; scratch Playwright: UI suite 73/73, mobile audit clean.
+- **Not done / known problems / next steps:** see §11 (several kinds per calculation, liqueurs/cider, EU preferences).
+
 ---
 
 ## 13. Domain notes: Ukrainian customs (RE-VERIFIED 2026-11-18 against the official law texts)
@@ -826,6 +881,25 @@ All numbers live in `backend/app/customs/tax_rates.json` (verified against `zako
 - **Excise:** `base × (cc / 1000) × K_age`, where `base` is `€50/€100` (`petrol` ≤3000 / >3000 cc) or `€75/€150` (`diesel` ≤3500 / >3500 cc), `hybrid` uses `petrol` rate (petrol hybrids only; a diesel hybrid 8703 50/70 = choose `diesel`), and `K_age = clamp(current_year − manufacture_year − 1, 1, 15)`, but **`K_age = 1` for a new (never used) car whatever its year** (TC 215.3.5-1 "для нових транспортних засобів … коефіцієнт дорівнює 1"). Electric (`8703 80 x0 10`) = `€1/kWh`. Not modeled: range-extender EVs (8703 80 x0 90): 8% duty + flat €100 excise; the UI warns about them.
 - **VAT:** **20%** on `(customs_value + duty + excise)` (EV VAT exemption expired 01.01.2026). Pension Fund levy, certification, and broker fees excluded.
 - **Pitch check (€10,000 car):** EU new 0.8L petrol or 40 kWh EV → **€2,048.00**; 2013 non-EU 2.0L petrol ($K_{age}=12$) or 2.0L diesel ($K_{age}=8$) → **€4,640.00** ✔.
+
+**Excise goods (alcohol, tobacco, e-liquids, fuel) — verified 18.11 against the official texts:**
+- **Parcels:** MK 234 p.6 — excise goods have no €150 threshold (duty + excise + VAT from the first euro), BUT MK 235 p.1
+  items 6–7 ban alcohol, tobacco (and all UKTZED chapter 1–24 goods except food ≤ 10 kg, so e-liquids too) in postal
+  and express items to private persons regardless of value; fuel is a dangerous good (UPU). So the calculator handles
+  them only **in luggage**: tab "Підакцизні в багажі", `delivery_type: "excise"`, rules in `excise_rule_sets` of
+  `tax_rates.json`.
+- **Duty-free norms per adult** (MK 376 p.2): 5 l beer, 2 l wine (still + sparkling), 1 l spirits > 22%, 200 cigarettes
+  or 50 cigars or 250 g tobacco; none for heated sticks and e-liquids (not named in 376). Fuel: tank + canister ≤ 20 l
+  (MK 374 p.10 item 12). Abroad < 24 h → no alcohol/tobacco norm (376 p.3). Above the norm only the excess is taxed.
+- **Excise 2026** (TC 215.3.1, 215.3.3-1, transitional subsection 5 items 17 and 48; `by_year` tables to 2027):
+  beer 59.82 грн per l of 100% alcohol; still wine 0.01 грн/l; sparkling 12.23 грн/l; spirits 133.31 грн per l of 100%;
+  cigarettes €61/1000 + 12% of price, min €82/1000 (2027: 64 / 86); cigars and tobacco €77/kg (81); heated sticks
+  €70.8/1000 (71.14); e-liquid €300/l; petrol €300.8/1000 l (329.9); diesel €253.8/1000 l (291.9). UAH rates are
+  converted at the NBU EUR rate. The cigarettes' ad valorem part uses the purchase price instead of the Ukrainian
+  maximum retail price (documented approximation).
+- **Duty** (Customs Tariff, preferential column): beer €0.05/l, still wine €0.3/l, sparkling €1.5/l, spirits 0,
+  cigarettes €1.5/1000, cigars 10%, tobacco 20%, heated sticks €1.8/kg, e-liquid 3%, petrol 10% (with ≥ 5% bio
+  components; 0% without), diesel 0. VAT 20% on (value + duty + excise).
 
 **Exchange rates (`backend/app/services/rates_service.py`):** NBU official daily JSON (`EUR`, `USD`, `UAH`, `GBP`, `PLN`), 1h in-memory cache with last-good / static fallback (`rate_source: "fallback"`).
 

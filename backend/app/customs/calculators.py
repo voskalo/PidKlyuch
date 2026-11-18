@@ -7,8 +7,12 @@ from abc import ABC, abstractmethod
 from datetime import date
 from decimal import Decimal
 
-from app.customs.models import Breakdown, CarInput, EngineType, Origin, ParcelInput, Sender, TaxLine, money
-from app.customs.rules import CAR_CURRENT, PARCEL_CURRENT, CarRules, ParcelRules
+from app.customs.models import (
+    Breakdown, CarInput, EngineType, ExciseInput, Origin, ParcelInput, Sender, TaxLine, money,
+)
+from app.customs.rules import (
+    CAR_CURRENT, EXCISE_CURRENT, PARCEL_CURRENT, CarRules, ExciseKind, ExciseRate, ExciseRules, ParcelRules,
+)
 
 ZERO = Decimal("0")
 
@@ -135,5 +139,124 @@ class CarCalculator(CustomsCalculator):
         vat = money((customs_value + duty + excise) * r.vat_rate)
         result.lines.append(TaxLine(
             "vat", "ПДВ", vat, f"{_pct(r.vat_rate)} × ({customs_value} + {duty} + {excise}) = {vat} EUR",
+        ))
+        return result
+
+
+UNIT_LABEL = {"l": "л", "ml": "мл", "pcs": "шт", "g": "г"}
+
+
+def _num(value: Decimal) -> str:
+    """Decimal for formulas without trailing zeros: 1.500 -> 1.5, 200 -> 200."""
+    return f"{value.normalize():f}"
+
+
+class ExciseCalculator(CustomsCalculator):
+    """Excise goods in luggage (MK 376, 374 p.10 / TC 215.3, transitional subsection 5).
+
+    Above the duty-free allowance: duty (Customs Tariff, preferential column) + excise (Tax Code) +
+    VAT 20% on (value + duty + excise), from the first euro — there is no €150/€500 threshold for excise goods.
+    Only the quantity above the allowance is taxed; its value is the price share of that quantity.
+    UAH-denominated excise rates are converted at the NBU EUR rate (eur_uah).
+    """
+
+    def __init__(self, rules: ExciseRules = EXCISE_CURRENT, eur_uah: Decimal = Decimal("50"),
+                 current_year: int | None = None):
+        if eur_uah <= 0:
+            raise ValueError("eur_uah must be positive")
+        self.rules = rules
+        self.eur_uah = eur_uah
+        self.year = current_year or date.today().year
+
+    def allowance(self, kind: ExciseKind, under_24h: bool) -> Decimal:
+        if under_24h and kind.group in self.rules.allowance_groups_24h:
+            return ZERO
+        return kind.allowance
+
+    def _base(self, per: str, kind: ExciseKind, qty: Decimal, weight_kg: Decimal | None,
+              abv: Decimal | None) -> tuple[Decimal, str]:
+        """How many 'units of the rate' the taxed quantity is, plus a label for the formula."""
+        litres = qty / 1000 if kind.unit == "ml" else qty
+        if per == "litre":
+            return litres, f"{_num(litres)} л"
+        if per == "litre_abs_alcohol":
+            return litres * abv / 100, f"{_num(litres)} л × {_num(abv)}%"
+        if per == "1000_pcs":
+            return qty / 1000, f"{_num(qty / 1000)} тис. шт"
+        if per == "1000_litres":
+            return litres / 1000, f"{_num(litres / 1000)} тис. л"
+        if per == "kg":
+            return weight_kg, f"{_num(weight_kg)} кг"
+        raise ValueError(f"unsupported rate base {per!r}")
+
+    def _component(self, rate: ExciseRate, kind: ExciseKind, qty: Decimal, value: Decimal,
+                   weight_kg: Decimal | None, abv: Decimal | None) -> tuple[Decimal, str, int]:
+        r, year = rate.value(self.year)
+        if rate.per == "percent":
+            amount = money(value * r)
+            return amount, f"{_pct(r)} × {value} = {amount} EUR", year
+        base, base_label = self._base(rate.per, kind, qty, weight_kg, abv)
+        to_eur = (lambda x: x / self.eur_uah) if rate.currency == "UAH" else (lambda x: x)
+        sym = "грн" if rate.currency == "UAH" else "€"
+        conv = f" ÷ {_num(self.eur_uah)} грн/€" if rate.currency == "UAH" else ""
+        specific = to_eur(r * base)
+        if rate.ad_valorem is None:
+            amount = money(specific)
+            return amount, f"{_num(r)} {sym} × {base_label}{conv} = {amount} EUR", year
+        # cigarettes: specific + ad valorem share of the price, but not less than the minimum (per 1000 pcs)
+        minimum = to_eur(rate.minimum(self.year) * base)
+        combined = specific + value * rate.ad_valorem
+        amount = money(max(combined, minimum))
+        return amount, (f"max({_num(r)} € × {base_label} + {_pct(rate.ad_valorem)} × {value}; "
+                        f"мін. {_num(rate.minimum(self.year))} € × {base_label}) = {amount} EUR"), year
+
+    def calculate(self, data: ExciseInput) -> Breakdown:
+        kind = self.rules.kinds.get(data.kind)
+        if kind is None:
+            raise ValueError(f"unknown excise kind {data.kind!r}")
+        if data.quantity <= 0:
+            raise ValueError("quantity must be positive")
+        abv = data.abv if data.abv is not None else kind.abv_default
+        if kind.abv_required and abv is None:
+            raise ValueError(f"abv is required for {data.kind}")
+        if kind.weight_required and not data.weight_g:
+            raise ValueError(f"weight_g is required for {data.kind}")
+
+        price = money(data.price_eur)
+        unit = UNIT_LABEL[kind.unit]
+        result = Breakdown(rules_key=self.rules.key, goods_value_eur=price, shipping_eur=ZERO, notes=list(self.rules.notes))
+        allowance = self.allowance(kind, data.under_24h)
+        taxed_qty = max(ZERO, data.quantity - allowance)
+        lost = data.under_24h and kind.allowance > 0 and allowance == 0
+        result.notes.insert(0, (
+            f"Безмитна норма на 1 особу від 18 років: {kind.allowance_note}."
+            + (" Ви були за кордоном менше 24 годин — норма не діє (ст. 376 ч. 3 МКУ)." if lost else "")
+        ))
+        if taxed_qty == 0:
+            result.notes.insert(0, f"{_num(data.quantity)} {unit} — у межах безмитної норми: податків немає.")
+            return result
+
+        share = taxed_qty / data.quantity
+        value = money(price * share)
+        weight_kg = None
+        if kind.unit == "g":
+            weight_kg = taxed_qty / 1000
+        elif data.weight_g:
+            weight_kg = data.weight_g * share / 1000
+        if allowance > 0:
+            result.notes.insert(0, (
+                f"Оподатковано {_num(taxed_qty)} {unit} понад норму {_num(allowance)} {unit} "
+                f"(вартість цієї частини: {value} EUR)."
+            ))
+
+        duty, duty_formula, _ = self._component(kind.duty, kind, taxed_qty, value, weight_kg, abv)
+        excise, excise_formula, year = self._component(kind.excise, kind, taxed_qty, value, weight_kg, abv)
+        if year != self.year:
+            result.notes.append(f"Ставку акцизу на {self.year} рік у файлі ставок ще не внесено — використано ставку {year} року.")
+        vat = money((value + duty + excise) * self.rules.vat_rate)
+        result.lines.append(TaxLine("duty", "Мито", duty, duty_formula))
+        result.lines.append(TaxLine("excise", "Акциз", excise, excise_formula))
+        result.lines.append(TaxLine(
+            "vat", "ПДВ", vat, f"{_pct(self.rules.vat_rate)} × ({value} + {duty} + {excise}) = {vat} EUR",
         ))
         return result

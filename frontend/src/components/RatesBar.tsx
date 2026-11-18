@@ -82,7 +82,7 @@ export const RatesBar: React.FC = () => {
             onClick={fetchRates}
             disabled={loading}
             title="Оновити курси"
-            className="text-slate-400 hover:text-white transition-colors p-1 rounded hover:bg-slate-800 disabled:opacity-50"
+            className="text-slate-400 hover:text-white transition-colors p-1.5 rounded hover:bg-slate-800 disabled:opacity-50"
           >
             <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
           </button>

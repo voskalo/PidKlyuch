@@ -47,6 +47,17 @@ class CarInput:
 
 
 @dataclass(frozen=True)
+class ExciseInput:
+    """Excise goods brought in luggage by one adult (alcohol, tobacco, e-liquids, fuel in a canister)."""
+    kind: str  # key of excise_rule_sets.*.kinds in tax_rates.json
+    quantity: Decimal  # in the kind's unit: l | ml | pcs | g
+    price_eur: Decimal  # price paid for the whole quantity
+    abv: Decimal | None = None  # % alcohol by volume (beer, spirits)
+    weight_g: Decimal | None = None  # net weight of the whole quantity (cigars, heated tobacco sticks)
+    under_24h: bool = False  # abroad less than 24 hours: no duty-free allowance (MK 376 p.3)
+
+
+@dataclass(frozen=True)
 class TaxLine:
     code: str  # duty | excise | vat
     label: str

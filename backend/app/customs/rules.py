@@ -8,7 +8,7 @@ Set TAX_RATES_PATH to load another file (e.g. one mounted from S3) without a red
 """
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -80,6 +80,67 @@ class CarRules:
     sources: tuple[str, ...] = ()
 
 
+RATE_BASES = ("litre", "litre_abs_alcohol", "1000_pcs", "kg", "1000_litres", "percent")
+UNITS = ("l", "ml", "pcs", "g")
+
+
+@dataclass(frozen=True)
+class ExciseRate:
+    """One duty or excise component of an excise good.
+
+    per: what the rate is multiplied by — litres, litres of 100% alcohol, thousands of pieces, kg net,
+    thousands of litres, or "percent" of the customs value. Values may change per calendar year (by_year).
+    """
+    per: str
+    currency: str | None  # "EUR" | "UAH"; None for percent
+    by_year: dict[int, Decimal]  # a single value is stored under year 0 (valid every year)
+    ad_valorem: Decimal | None = None  # cigarettes: + this share of the price ...
+    minimum_by_year: dict[int, Decimal] | None = None  # ... but not less than this per 1000 pcs
+
+    @staticmethod
+    def _pick(table: dict[int, Decimal], year: int) -> tuple[Decimal, int]:
+        if 0 in table:
+            return table[0], year
+        known = sorted(table)
+        y = year if year in table else (known[-1] if year > known[-1] else known[0])
+        return table[y], y
+
+    def value(self, year: int) -> tuple[Decimal, int]:
+        """(rate, year the rate belongs to) — the latest known year is used after the schedule ends."""
+        return self._pick(self.by_year, year)
+
+    def minimum(self, year: int) -> Decimal | None:
+        return self._pick(self.minimum_by_year, year)[0] if self.minimum_by_year else None
+
+
+@dataclass(frozen=True)
+class ExciseKind:
+    key: str
+    label: str
+    group: str  # alcohol | tobacco | e_liquid | fuel
+    unit: str  # l | ml | pcs | g
+    allowance: Decimal  # duty-free quantity per adult in luggage (in `unit`)
+    allowance_note: str
+    duty: ExciseRate
+    excise: ExciseRate
+    abv_required: bool = False
+    abv_default: Decimal | None = None
+    abv_min: Decimal | None = None
+    abv_max: Decimal | None = None
+    weight_required: bool = False
+
+
+@dataclass(frozen=True)
+class ExciseRules:
+    key: str
+    title: str
+    vat_rate: Decimal
+    allowance_groups_24h: tuple[str, ...]  # groups whose allowance is void after < 24 h abroad (MK 376 p.3)
+    kinds: dict[str, ExciseKind]
+    notes: tuple[str, ...] = ()
+    sources: tuple[str, ...] = ()
+
+
 @dataclass(frozen=True)
 class TaxRates:
     version: str
@@ -87,6 +148,7 @@ class TaxRates:
     parcel: dict[str, ParcelRules]
     car: dict[str, CarRules]
     sources: dict[str, dict]
+    excise: dict[str, ExciseRules] = field(default_factory=dict)
 
 
 def _base(value: str) -> str:
@@ -143,6 +205,46 @@ def _car(key: str, r: dict) -> CarRules:
     )
 
 
+def _rate(r: dict) -> ExciseRate:
+    if r["per"] not in RATE_BASES:
+        raise ValueError(f"excise rate 'per' must be one of {RATE_BASES}, got {r['per']!r}")
+    if ("value" in r) == ("by_year" in r):
+        raise ValueError("an excise rate needs exactly one of 'value' or 'by_year'")
+    by_year = {0: _d(r["value"])} if "value" in r else {int(y): _d(v) for y, v in r["by_year"].items()}
+    minimum = {int(y): _d(v) for y, v in r["minimum_by_year"].items()} if "minimum_by_year" in r else None
+    currency = r.get("currency")
+    if r["per"] != "percent" and currency not in ("EUR", "UAH"):
+        raise ValueError(f"excise rate per {r['per']} needs currency EUR or UAH")
+    return ExciseRate(per=r["per"], currency=currency, by_year=by_year,
+                      ad_valorem=_d(r["ad_valorem"]) if "ad_valorem" in r else None, minimum_by_year=minimum)
+
+
+def _excise(key: str, r: dict) -> ExciseRules:
+    kinds = {}
+    for k, v in r["kinds"].items():
+        if v["unit"] not in UNITS:
+            raise ValueError(f"excise kind {k}: unit must be one of {UNITS}")
+        abv = v.get("abv") or {}
+        kinds[k] = ExciseKind(
+            key=k, label=v["label"], group=v["group"], unit=v["unit"], allowance=_d(v["allowance"]),
+            allowance_note=v["allowance_note"], duty=_rate(v["duty"]), excise=_rate(v["excise"]),
+            abv_required=bool(abv.get("required", False)),
+            abv_default=_d(abv["default"]) if "default" in abv else None,
+            abv_min=_d(abv["min"]) if "min" in abv else None,
+            abv_max=_d(abv["max"]) if "max" in abv else None,
+            weight_required=bool(v.get("weight_required", False)),
+        )
+        if (kinds[k].excise.per == "litre_abs_alcohol" or kinds[k].duty.per == "litre_abs_alcohol") and not kinds[k].abv_required:
+            raise ValueError(f"excise kind {k}: a rate per litre of 100% alcohol needs 'abv'")
+        if "kg" in (kinds[k].duty.per, kinds[k].excise.per) and v["unit"] != "g" and not kinds[k].weight_required:
+            raise ValueError(f"excise kind {k}: a rate per kg needs unit 'g' or weight_required")
+    return ExciseRules(
+        key=key, title=r["title"], vat_rate=_d(r["vat_rate"]),
+        allowance_groups_24h=tuple(r.get("allowance_groups_24h", [])), kinds=kinds,
+        notes=tuple(r.get("notes", [])), sources=tuple(r.get("sources", [])),
+    )
+
+
 def load_tax_rates(path: str | Path | None = None) -> TaxRates:
     """Load and validate the rates file. Fails loudly (at startup) on a broken file."""
     path = Path(path or os.environ.get("TAX_RATES_PATH") or DEFAULT_RATES_PATH)
@@ -153,8 +255,9 @@ def load_tax_rates(path: str | Path | None = None) -> TaxRates:
         parcel={k: _parcel(k, v) for k, v in raw["parcel_rule_sets"].items()},
         car={k: _car(k, v) for k, v in raw["car_rule_sets"].items()},
         sources=raw.get("sources", {}),
+        excise={k: _excise(k, v) for k, v in raw.get("excise_rule_sets", {}).items()},
     )
-    for rule in (*rates.parcel.values(), *rates.car.values()):
+    for rule in (*rates.parcel.values(), *rates.car.values(), *rates.excise.values()):
         missing = [s for s in rule.sources if s not in rates.sources]
         if missing:
             raise ValueError(f"rule set '{rule.key}' references unknown sources: {missing}")
@@ -163,6 +266,8 @@ def load_tax_rates(path: str | Path | None = None) -> TaxRates:
             raise ValueError(f"parcel_rule_sets must contain '{required}'")
     if "current" not in rates.car:
         raise ValueError("car_rule_sets must contain 'current'")
+    if "current" not in rates.excise:
+        raise ValueError("excise_rule_sets must contain 'current'")
     return rates
 
 
@@ -171,3 +276,4 @@ PARCEL_RULES: dict[str, ParcelRules] = TAX_RATES.parcel
 PARCEL_CURRENT = PARCEL_RULES["current"]
 PARCEL_JULY_2027 = PARCEL_RULES["july_2027"]
 CAR_CURRENT = TAX_RATES.car["current"]
+EXCISE_CURRENT = TAX_RATES.excise["current"]

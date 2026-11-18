@@ -5,6 +5,8 @@ from typing import Annotated, Literal
 from fastapi import Body
 from pydantic import BaseModel, Field, model_validator
 
+from app.customs.rules import EXCISE_CURRENT
+
 Currency = Literal["EUR", "USD", "UAH", "GBP", "PLN"]
 Amount = Annotated[Decimal, Field(ge=0, le=10_000_000, max_digits=12, decimal_places=2)]
 
@@ -42,9 +44,40 @@ class CarIn(BaseModel):
         return self
 
 
+ExciseKindKey = Literal["beer", "wine", "sparkling_wine", "spirits", "cigarettes", "cigars", "smoking_tobacco",
+                        "heated_tobacco", "e_liquid", "petrol", "diesel"]
+assert set(ExciseKindKey.__args__) == set(EXCISE_CURRENT.kinds), "keep ExciseKindKey in sync with tax_rates.json"
+
+
+class ExciseIn(BaseModel):
+    """Excise goods in one adult's luggage (alcohol, tobacco, e-liquids, fuel in a canister).
+
+    Not for parcels: MK 235 bans alcohol/tobacco/e-liquids in postal and express items to private persons.
+    """
+    delivery_type: Literal["excise"]
+    kind: ExciseKindKey
+    quantity: Decimal = Field(gt=0, le=100_000, max_digits=9, decimal_places=3)  # l | ml | pcs | g, see the kind
+    item_price: Amount  # price paid for the whole quantity
+    currency: Currency = "EUR"
+    abv: Decimal | None = Field(default=None, gt=0, le=96, max_digits=4, decimal_places=1)  # % vol (beer, spirits)
+    weight_g: Decimal | None = Field(default=None, gt=0, le=100_000, max_digits=9, decimal_places=1)  # cigars, sticks
+    under_24h: bool = False  # abroad < 24 h: no allowance for alcohol and tobacco (MK 376 p.3)
+
+    @model_validator(mode="after")
+    def _kind_fields(self):
+        kind = EXCISE_CURRENT.kinds[self.kind]
+        if kind.unit == "pcs" and self.quantity != self.quantity.to_integral_value():
+            raise ValueError(f"quantity of {self.kind} is a whole number of pieces")
+        if kind.abv_required and self.abv is not None and not (kind.abv_min <= self.abv <= kind.abv_max):
+            raise ValueError(f"abv for {self.kind} must be between {kind.abv_min} and {kind.abv_max}")
+        if kind.weight_required and self.weight_g is None:
+            raise ValueError(f"weight_g is required for {self.kind}")
+        return self
+
+
 # Body(discriminator=...) makes FastAPI validate ONLY the model selected by delivery_type, so a bad car
 # gets car errors (not "Input should be 'parcel'" from trying ParcelIn first).
-CalculationIn = Annotated[ParcelIn | CarIn, Body(discriminator="delivery_type")]
+CalculationIn = Annotated[ParcelIn | CarIn | ExciseIn, Body(discriminator="delivery_type")]
 
 
 class TaxLineOut(BaseModel):
@@ -78,6 +111,26 @@ class CalculationOut(BaseModel):
 class CompareRulesOut(BaseModel):
     current: CalculationOut
     july_2027: CalculationOut
+
+
+class ExciseKindOut(BaseModel):
+    key: str
+    label: str
+    group: str
+    unit: str
+    allowance: Decimal
+    allowance_note: str
+    abv_required: bool
+    abv_default: Decimal | None
+    abv_min: Decimal | None
+    abv_max: Decimal | None
+    weight_required: bool
+
+
+class ExciseKindsOut(BaseModel):
+    kinds: list[ExciseKindOut]
+    allowance_groups_24h: list[str]  # groups that lose the allowance after < 24 h abroad
+    notes: list[str]
 
 
 class RatesOut(BaseModel):

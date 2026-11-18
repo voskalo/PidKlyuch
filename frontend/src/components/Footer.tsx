@@ -35,13 +35,13 @@ export const Footer: React.FC<FooterProps> = ({ onOpenDonation, onOpenStats }) =
             <h5 className="font-bold text-slate-900 uppercase tracking-wider text-[11px]">
               Корисні посилання
             </h5>
-            <ul className="space-y-1.5">
+            <ul className="space-y-0.5">
               <li>
                 <a
                   href="https://zakon.rada.gov.ua/laws/show/4495-17#Text"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="hover:text-blue-600 transition-colors flex items-center gap-1"
+                  className="hover:text-blue-600 transition-colors flex items-center gap-1 py-1"
                 >
                   Митний кодекс України
                   <ExternalLink className="w-3 h-3 opacity-60" />
@@ -52,7 +52,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenDonation, onOpenStats }) =
                   href="https://zakon.rada.gov.ua/laws/show/2755-17#Text"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="hover:text-blue-600 transition-colors flex items-center gap-1"
+                  className="hover:text-blue-600 transition-colors flex items-center gap-1 py-1"
                 >
                   Податковий кодекс України
                   <ExternalLink className="w-3 h-3 opacity-60" />
@@ -63,7 +63,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenDonation, onOpenStats }) =
                   href="https://bank.gov.ua/"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="hover:text-blue-600 transition-colors flex items-center gap-1"
+                  className="hover:text-blue-600 transition-colors flex items-center gap-1 py-1"
                 >
                   Національний банк України
                   <ExternalLink className="w-3 h-3 opacity-60" />
@@ -77,11 +77,11 @@ export const Footer: React.FC<FooterProps> = ({ onOpenDonation, onOpenStats }) =
             <h5 className="font-bold text-slate-900 uppercase tracking-wider text-[11px]">
               Про проєкт
             </h5>
-            <ul className="space-y-1.5">
+            <ul className="space-y-0.5">
               <li>
                 <button
                   onClick={onOpenStats}
-                  className="hover:text-blue-600 transition-colors"
+                  className="hover:text-blue-600 transition-colors py-1"
                 >
                   Статистика використання
                 </button>
@@ -89,7 +89,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenDonation, onOpenStats }) =
               <li>
                 <button
                   onClick={onOpenDonation}
-                  className="text-amber-700 hover:text-amber-800 font-medium flex items-center gap-1"
+                  className="text-amber-700 hover:text-amber-800 font-medium flex items-center gap-1 py-1"
                 >
                   <Heart className="w-3 h-3 text-rose-500 fill-current" />
                   Підтримати ЗСУ (Донат)

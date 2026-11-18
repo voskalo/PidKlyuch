@@ -36,7 +36,7 @@ export const StatsModal: React.FC<StatsModalProps> = ({ isOpen, onClose }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-100">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain border border-slate-100">
         <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-slate-50/70">
           <div className="flex items-center gap-2">
             <BarChart3 className="w-5 h-5 text-blue-600" />
@@ -67,7 +67,7 @@ export const StatsModal: React.FC<StatsModalProps> = ({ isOpen, onClose }) => {
               {error}
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-3">
               <div className="p-4 rounded-xl bg-blue-50/70 border border-blue-100">
                 <div className="flex items-center justify-between text-blue-600 mb-1">
                   <span className="text-xs font-semibold">Розрахунків</span>

@@ -131,7 +131,7 @@ export const ParcelForm: React.FC<ParcelFormProps> = ({
               placeholder="200"
               className="flex-1 min-w-0 px-3.5 py-2.5 text-base font-bold text-slate-900 focus:outline-none"
             />
-            <div className="relative shrink-0 border-l border-slate-200 bg-slate-100/90 min-w-[88px]">
+            <div className="relative shrink-0 border-l border-slate-200 bg-slate-100/90 min-w-[100px] lg:min-w-[88px]">
               <select
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value as Currency)}
@@ -148,7 +148,7 @@ export const ParcelForm: React.FC<ParcelFormProps> = ({
             </div>
           </div>
           <p className="text-[11px] text-slate-500 mt-1">
-            Будь-які товари рахуються однаково (ст. 374 МКУ), крім підакцизних — алкоголю, тютюну, рідин для е-сигарет
+            Будь-які товари рахуються однаково (ст. 374 МКУ). Алкоголь, тютюн і рідини для е-сигарет у посилках фізособам заборонені (ст. 235 МКУ) — див. вкладку «Підакцизні»
           </p>
         </div>
 
@@ -236,7 +236,7 @@ export const ParcelForm: React.FC<ParcelFormProps> = ({
             <button
               type="button"
               onClick={() => setShowSenderHelp(!showSenderHelp)}
-              className="text-[11px] text-blue-600 hover:underline font-medium"
+              className="text-[11px] text-blue-600 hover:underline font-medium py-1.5 px-1 -my-1.5"
             >
               {showSenderHelp ? 'Приховати' : 'Що це означає?'}
             </button>

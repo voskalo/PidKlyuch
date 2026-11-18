@@ -4,6 +4,7 @@ import { Navbar } from './components/Navbar';
 import { RatesBar } from './components/RatesBar';
 import { ParcelForm } from './components/ParcelForm';
 import { CarForm } from './components/CarForm';
+import { ExciseForm } from './components/ExciseForm';
 import { BreakdownView } from './components/BreakdownView';
 import { HistoryView } from './components/HistoryView';
 import { CompareRulesModal } from './components/CompareRulesModal';
@@ -22,11 +23,24 @@ import { api } from './services/api';
 import {
   Package,
   Car,
+  Luggage,
   CheckCircle2,
   AlertCircle,
   HelpCircle,
   Sparkles,
 } from 'lucide-react';
+
+const DELIVERY_TABS: {
+  id: DeliveryType;
+  icon: React.ElementType;
+  label: string;
+  short: string;
+  heading: string;
+}[] = [
+  { id: 'parcel', icon: Package, label: 'Посилки з-за кордону', short: 'Посилки', heading: 'Параметри посилки' },
+  { id: 'car', icon: Car, label: 'Розмитнення авто', short: 'Авто', heading: 'Параметри автомобіля' },
+  { id: 'excise', icon: Luggage, label: 'Підакцизні в багажі', short: 'Підакцизні', heading: 'Алкоголь, тютюн, пальне' },
+];
 
 const MainApp: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<'calculator' | 'history'>('calculator');
@@ -147,40 +161,35 @@ const MainApp: React.FC = () => {
               </p>
             </div>
 
-            {/* Delivery type selector buttons */}
+            {/* Delivery type selector buttons (short labels and stacked icons on phones so 3 tabs fit) */}
             <div className="flex justify-center">
-              <div className="bg-slate-200/80 p-1.5 rounded-2xl flex items-center gap-1.5 max-w-md w-full shadow-inner">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDeliveryType('parcel');
-                    setCalculationResult(null);
-                  }}
-                  className={`flex-1 py-3 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all ${
-                    deliveryType === 'parcel'
-                      ? 'bg-white text-blue-600 shadow-md scale-[1.02]'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <Package className="w-4 h-4" />
-                  <span>Посилки з-за кордону</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDeliveryType('car');
-                    setCalculationResult(null);
-                  }}
-                  className={`flex-1 py-3 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all ${
-                    deliveryType === 'car'
-                      ? 'bg-white text-blue-600 shadow-md scale-[1.02]'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <Car className="w-4 h-4" />
-                  <span>Розмитнення авто</span>
-                </button>
+              <div
+                role="tablist"
+                aria-label="Що розмитнюємо"
+                className="bg-slate-200/80 p-1.5 rounded-2xl flex items-stretch gap-1 sm:gap-1.5 max-w-2xl w-full shadow-inner"
+              >
+                {DELIVERY_TABS.map(({ id, icon: Icon, label, short }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    role="tab"
+                    aria-selected={deliveryType === id}
+                    onClick={() => {
+                      setDeliveryType(id);
+                      setCalculationResult(null);
+                      setLastParcelRequest(null);
+                    }}
+                    className={`flex-1 min-w-0 py-2.5 sm:py-3 px-1.5 sm:px-4 rounded-xl font-bold text-xs sm:text-sm flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 transition-all ${
+                      deliveryType === id
+                        ? 'bg-white text-blue-600 shadow-md sm:scale-[1.02]'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4 shrink-0" />
+                    <span className="sm:hidden truncate max-w-full">{short}</span>
+                    <span className="hidden sm:inline">{label}</span>
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -190,20 +199,18 @@ const MainApp: React.FC = () => {
               <div className="lg:col-span-6 bg-white p-6 sm:p-7 rounded-3xl border border-slate-200 shadow-sm space-y-6">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                   <h2 className="font-bold text-slate-900 text-base flex items-center gap-2">
-                    {deliveryType === 'parcel' ? (
-                      <>
-                        <Package className="w-5 h-5 text-blue-600" />
-                        Параметри посилки
-                      </>
-                    ) : (
-                      <>
-                        <Car className="w-5 h-5 text-blue-600" />
-                        Параметри автомобіля
-                      </>
-                    )}
+                    {(() => {
+                      const tab = DELIVERY_TABS.find((t) => t.id === deliveryType)!;
+                      return (
+                        <>
+                          <tab.icon className="w-5 h-5 text-blue-600 shrink-0" />
+                          {tab.heading}
+                        </>
+                      );
+                    })()}
                   </h2>
 
-                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                  <span className="hidden sm:inline text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
                     Крок за кроком
                   </span>
                 </div>
@@ -214,11 +221,13 @@ const MainApp: React.FC = () => {
                     onCompare={handleCompare}
                     onError={handleError}
                   />
-                ) : (
+                ) : deliveryType === 'car' ? (
                   <CarForm
                     onCalculated={handleCalculated}
                     onError={handleError}
                   />
+                ) : (
+                  <ExciseForm onCalculated={handleCalculated} onError={handleError} />
                 )}
               </div>
 
