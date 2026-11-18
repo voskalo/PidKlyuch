@@ -7,6 +7,7 @@ import type {
   CarOrigin,
 } from '../types/api';
 import { api } from '../services/api';
+import { parseAmount } from '../utils/amount';
 import {
   Car,
   Fuel,
@@ -39,6 +40,18 @@ const CURRENCY_OPTIONS: { code: Currency; symbol: string; label: string }[] = [
   { code: 'GBP', symbol: '£', label: '£ GBP' },
 ];
 
+const MIN_YEAR = 1950; // same as the API (manufacture_year ≥ 1950)
+
+// The most common mistake is typing litres ("1.6") instead of cm³ (1600).
+function engineVolumeProblem(raw: string): string | null {
+  const v = Number(raw);
+  if (raw.trim() !== '' && Number.isInteger(v) && v >= 100 && v <= 10000) return null;
+  if (v > 0 && v < 20) {
+    return `Схоже, це об'єм у літрах. Вкажіть у см³: ${v} л ≈ ${Math.round(v * 1000)} см³`;
+  }
+  return "Вкажіть об'єм двигуна в см³: ціле число від 100 до 10 000 (наприклад, 1998)";
+}
+
 export const CarForm: React.FC<CarFormProps> = ({ onCalculated, onError }) => {
   const [carPrice, setCarPrice] = useState<string>('10000');
   const [shippingPrice, setShippingPrice] = useState<string>('1200');
@@ -48,6 +61,8 @@ export const CarForm: React.FC<CarFormProps> = ({ onCalculated, onError }) => {
   const [batteryKwh, setBatteryKwh] = useState<string>('75');
   const [manufactureYear, setManufactureYear] = useState<string>('2014');
   const [origin, setOrigin] = useState<CarOrigin>('eu');
+  // null = the user has not touched the checkbox: then a car made this year counts as new (as in the API)
+  const [isNewOverride, setIsNewOverride] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(false);
 
   const currentYear = new Date().getFullYear();
@@ -56,22 +71,29 @@ export const CarForm: React.FC<CarFormProps> = ({ onCalculated, onError }) => {
     ? Math.min(15, Math.max(1, currentYear - yearNum - 1))
     : 1;
 
+  // "New car" only changes the result for non-EU petrol/hybrid cars over 3000 cm³ (5% duty instead of 10%).
+  const showIsNew =
+    (engineType === 'petrol' || engineType === 'hybrid') && origin === 'other' && Number(engineVolumeCc) > 3000;
+  const isNew = isNewOverride ?? (!isNaN(yearNum) && yearNum >= currentYear);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const priceNum = parseFloat(carPrice);
-    if (isNaN(priceNum) || priceNum <= 0) {
-      onError('Вкажіть коректну вартість авто');
+    const price = parseAmount(carPrice, 'вартість авто', { required: true, positive: true });
+    if (price.error !== null) {
+      onError(price.error);
       return;
     }
+    const priceNum = price.value;
 
-    const shipNum = shippingPrice ? parseFloat(shippingPrice) : 0;
-    if (isNaN(shipNum) || shipNum < 0) {
-      onError('Вкажіть коректну вартість доставки до кордону');
+    const ship = parseAmount(shippingPrice, 'вартість доставки до кордону');
+    if (ship.error !== null) {
+      onError(ship.error);
       return;
     }
+    const shipNum = ship.value;
 
-    if (isNaN(yearNum) || yearNum < 1980 || yearNum > currentYear) {
-      onError(`Вкажіть коректний рік випуску авто (від 1980 до ${currentYear})`);
+    if (!Number.isInteger(Number(manufactureYear)) || yearNum < MIN_YEAR || yearNum > currentYear) {
+      onError(`Вкажіть коректний рік випуску авто (від ${MIN_YEAR} до ${currentYear})`);
       return;
     }
 
@@ -79,17 +101,18 @@ export const CarForm: React.FC<CarFormProps> = ({ onCalculated, onError }) => {
     let batteryNum: number | null = null;
 
     if (engineType === 'electric') {
-      batteryNum = parseFloat(batteryKwh);
-      if (isNaN(batteryNum) || batteryNum <= 0) {
-        onError('Вкажіть ємність батареї в кВт⋅год');
+      batteryNum = Number(batteryKwh);
+      if (batteryKwh.trim() === '' || !Number.isFinite(batteryNum) || batteryNum <= 0 || batteryNum > 500) {
+        onError('Вкажіть ємність батареї в кВт⋅год: від 1 до 500 (наприклад, 75)');
         return;
       }
     } else {
-      volumeNum = parseInt(engineVolumeCc, 10);
-      if (isNaN(volumeNum) || volumeNum <= 0) {
-        onError('Вкажіть об’єм двигуна в см³ (наприклад, 1998)');
+      const problem = engineVolumeProblem(engineVolumeCc);
+      if (problem) {
+        onError(problem);
         return;
       }
+      volumeNum = Number(engineVolumeCc);
     }
 
     try {
@@ -104,6 +127,7 @@ export const CarForm: React.FC<CarFormProps> = ({ onCalculated, onError }) => {
         battery_kwh: batteryNum,
         manufacture_year: yearNum,
         origin,
+        ...(showIsNew ? { is_new: isNew } : {}),
       };
 
       const res = await api.calculate(req);
@@ -225,6 +249,7 @@ export const CarForm: React.FC<CarFormProps> = ({ onCalculated, onError }) => {
                 type="number"
                 step="any"
                 min="1"
+                max="500"
                 required
                 value={batteryKwh}
                 onChange={(e) => setBatteryKwh(e.target.value)}
@@ -254,7 +279,13 @@ export const CarForm: React.FC<CarFormProps> = ({ onCalculated, onError }) => {
                 max="10000"
                 required
                 value={engineVolumeCc}
-                onChange={(e) => setEngineVolumeCc(e.target.value)}
+                onInvalid={(e) =>
+                  e.currentTarget.setCustomValidity(engineVolumeProblem(e.currentTarget.value) ?? '')
+                }
+                onChange={(e) => {
+                  e.currentTarget.setCustomValidity('');
+                  setEngineVolumeCc(e.target.value);
+                }}
                 placeholder="2000"
                 className="flex-1 min-w-0 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:outline-none"
               />
@@ -284,7 +315,7 @@ export const CarForm: React.FC<CarFormProps> = ({ onCalculated, onError }) => {
           <div className="flex rounded-xl shadow-sm border border-slate-200 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/30 focus-within:border-blue-500">
             <input
               type="number"
-              min="1980"
+              min={MIN_YEAR}
               max={currentYear}
               required
               value={manufactureYear}
@@ -348,6 +379,23 @@ export const CarForm: React.FC<CarFormProps> = ({ onCalculated, onError }) => {
             </p>
           </button>
         </div>
+
+        {showIsNew && (
+          <label className="mt-3 flex items-start gap-3 p-3 rounded-xl border border-slate-200 bg-white hover:border-slate-300 cursor-pointer transition-all">
+            <input
+              type="checkbox"
+              checked={isNew}
+              onChange={(e) => setIsNewOverride(e.target.checked)}
+              className="mt-0.5 w-4 h-4 shrink-0 accent-blue-600 cursor-pointer"
+            />
+            <div>
+              <div className="text-xs font-bold text-slate-900">Нове авто (раніше не використовувалося)</div>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Для нових бензинових авто й гібридів понад 3000 см³ мито 5% замість 10% (Митний тариф, 8703)
+              </p>
+            </div>
+          </label>
+        )}
       </div>
 
       <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex items-start gap-2.5 text-xs text-slate-600">
