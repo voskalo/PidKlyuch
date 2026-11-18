@@ -1,0 +1,39 @@
+{
+	email {$ACME_EMAIL:admin@example.com}
+}
+
+{$DOMAIN:localhost} {
+	encode zstd gzip
+
+	handle /healthz {
+		respond "OK" 200
+	}
+
+	handle /api/docs* {
+		uri strip_prefix /api
+		reverse_proxy backend:8000
+	}
+
+	handle /api/* {
+		reverse_proxy backend:8000
+	}
+
+	handle /docs* {
+		reverse_proxy backend:8000
+	}
+
+	handle /openapi.json {
+		reverse_proxy backend:8000
+	}
+
+	# Route all UI requests to frontend in full-stack mode, with seamless fallback
+	# to the Day 1 hello-world page when started via `--profile fallback`.
+	handle {
+		reverse_proxy frontend:80 hello:80 {
+			lb_policy first
+			lb_retries 1
+			lb_try_duration 2s
+			fail_duration 10s
+		}
+	}
+}

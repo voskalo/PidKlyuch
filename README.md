@@ -13,7 +13,7 @@ PidKlyuch makes that cost visible before you buy.
 
 > OOAD course project by Liubomyr Voskalo, Anna Kravchenko, and Anton Vertyporoh.
 
-- **Live demo:** _TBD (HTTPS URL)_
+- **Live demo:** https://16.170.212.120.sslip.io _(API Swagger docs: https://16.170.212.120.sslip.io/api/docs)_
 - **Report:** _TBD (`docs/report.pdf`)_
 
 ---
@@ -50,10 +50,11 @@ and the report PDF.
 - Apply the UX fixes from user feedback on Wednesday.
 
 ### 👤 Anton Vertyporoh: Infra, User Testing & Report  (`infra/`, `docs/`)
-- **Infra (AWS):** pick the AWS services for the backend (container from `backend/Dockerfile`), RDS Postgres, frontend hosting, and **HTTPS**. Put the setup in `infra/`. Deploy a "hello world" on **day 1**, then redeploy as features land. Optional CI (e.g. GitHub Actions → ECR) that runs the backend tests, plus a weekly run of the law watcher
-  (`python scripts/check_law_updates.py`; exit code ≠ 0 means a law changed, so alert the team).
+- **Infra (AWS):** Dockerfiles, Docker Compose + Caddy v2 reverse proxy, AWS EC2 deployment, and automatic **HTTPS**
+  via Let's Encrypt (`sslip.io`). Weekly run of the law watcher (`python scripts/check_law_updates.py`; exit code ≠ 0
+  means a law changed, so alert the team).
 - **User testing coordination:** feedback form (Google Form), testing script, and a shared table of testers and
-  their feedback.
+  their feedback (`docs/user-testing-plan.md`, `docs/recruiting-messages.md`).
 - **Report (PDF):** who tried it, how many people, what they said, what we changed, and donation evidence (screenshots).
 - README sections **"How to run"** and **"How to deploy"**.
 
@@ -69,8 +70,8 @@ and the report PDF.
 | Day | Liubomyr (backend) | Anna (frontend) | Anton (infra/docs) |
 |---|---|---|---|
 | **Mon 16** | Agree on stack together · scaffold backend · write API contract · verify customs rules | Agree on stack · scaffold frontend · page layout | Agree on stack · hello-world deploy on AWS over HTTPS |
-| **Tue 17** | Auth + parcel/car calculation + NBU rates · deployed | Auth pages + calculator flow + result page, connected to the API | Backend deploy on AWS · feedback form · recruit testers |
-| **Wed 18** | Morning: history + fixes · afternoon: fixes from feedback | Morning: history + donation · afternoon: fixes from feedback | **User testing sessions (all members)** · collect feedback · start the report |
+| **Tue 17** | Auth + parcel/car calculation + NBU rates · merged to `main` | Auth pages + calculator flow + result page + history + donation · merged to `main` | Full-stack AWS EC2 deploy over HTTPS · feedback form · recruit testers |
+| **Wed 18** | Morning: fixes · afternoon: fixes from feedback | Morning: fixes · afternoon: fixes from feedback | **User testing sessions (all members)** · collect feedback · start the report |
 | **Thu 19** | Final bug fixes, freeze in the morning | Final polish | Finish report PDF, README run/deploy · **demo** · everyone submits |
 
 **Must have for the demo:** HTTPS deploy, sign-up and sign-in, parcel and car calculation with an itemized
@@ -84,14 +85,36 @@ breakdown, NBU rates, history, donation link.
 ```
 backend/    API server, auth, customs calculation engine, database   (Liubomyr)
 frontend/   Web UI                                                  (Anna)
-infra/      Docker, deployment configs, CI                          (Anton)
+infra/      Docker, deployment configs, Caddy HTTPS proxy           (Anton)
 docs/       Customs rules spec, user-testing notes, report          (Anton)
 AGENTS.md   Shared context and work log for AI agents: read first, update after every task
 ```
 
-## How to run locally
+## How to run
 
-### Backend (Python 3.12+)
+### Option A: Full-Stack via Docker Compose (Recommended)
+
+**Prerequisites:** Docker Engine 24+ and Docker Compose v2 (`docker compose version`).
+
+```bash
+cp infra/.env.example infra/.env
+docker compose --env-file infra/.env -f infra/docker-compose.yml up --build
+```
+
+- **App UI (HTTPS via Caddy):** `https://localhost`
+- **API health check:** `https://localhost/api/health`
+- **Interactive API docs (Swagger):** `https://localhost/api/docs` (or `https://localhost/docs`)
+- **Reverse-proxy health check:** `https://localhost/healthz`
+
+*(To run only the static fallback HTTPS page without building `backend/` or `frontend/`:)*
+
+```bash
+DOMAIN=localhost docker compose --profile fallback -f infra/docker-compose.yml up --build caddy hello
+```
+
+### Option B: Run Services Individually (Local Development)
+
+#### Backend (Python 3.12+ / FastAPI)
 
 ```bash
 cd backend
@@ -101,14 +124,15 @@ cp .env.example .env            # defaults work locally (SQLite file pidklyuch.d
 .venv/bin/uvicorn app.main:app --reload
 ```
 
-- API: http://localhost:8000/api/health
-- Interactive API docs (try every endpoint): http://localhost:8000/docs
-- Tests: `.venv/bin/pytest`
+- API health: `http://localhost:8000/api/health`
+- Interactive Swagger docs: `http://localhost:8000/docs`
+- Unit tests (`66` tests): `cd backend && .venv/bin/pytest`
+- Law watcher check: `cd backend && .venv/bin/python scripts/check_law_updates.py`
 - With Docker instead: `docker build -t pidklyuch-backend backend && docker run -p 8000:8000 pidklyuch-backend`
 
-The API endpoints and the request/response formats are described in [`AGENTS.md`](AGENTS.md) §8.
+The API endpoints and request/response formats are described in [`AGENTS.md`](AGENTS.md) §8.
 
-### Frontend (React 19 + TypeScript + Vite)
+#### Frontend (React 19 + TypeScript + Vite)
 
 ```bash
 cd frontend
@@ -116,20 +140,88 @@ npm install
 npm run dev
 ```
 
-- Web UI: http://localhost:5173
+- Web UI: `http://localhost:5173`
 - Production build: `npm run build` (outputs static assets to `frontend/dist/`)
 - In local development, `/api/*` requests are proxied automatically to `http://127.0.0.1:8000`.
-- In production, set `VITE_API_BASE_URL` in `.env` if the backend is hosted on a separate origin.
+- In production, set `VITE_API_BASE_URL` in `.env` if the backend is hosted on a separate origin (leave empty when behind the same Caddy reverse-proxy origin).
+
+---
 
 ## How to deploy
 
-Everything is hosted on **AWS**: the backend container, **RDS PostgreSQL**, and the frontend with HTTPS. _TBD (Anton): the exact services, how HTTPS is set up, and deploy commands (see `infra/`)._
+PidKlyuch deploys as a single HTTPS origin on **AWS EC2 (Ubuntu 24.04 LTS)** using **Docker Compose** and **Caddy v2** (automatic Let's Encrypt TLS certificates, HTTP → HTTPS redirect, `/api/*` → FastAPI, and `/*` → React SPA routing).
 
-The backend is a single Docker image (`backend/Dockerfile`, listens on `$PORT`) and needs these environment
-variables in production:
+### Step 1: Launch AWS EC2 Instance & Open Firewall Ports
+1. Launch an **Ubuntu Server 24.04 LTS** EC2 instance (`t3.small` recommended, or `t3.micro` with 2 GB swap).
+2. In the EC2 **Security Group** inbound rules, allow:
+   - `22/tcp` (SSH)
+   - `80/tcp` (HTTP — required for Let's Encrypt ACME challenge and HTTP → HTTPS redirect)
+   - `443/tcp` (HTTPS)
+   - `443/udp` (HTTP/3)
 
-| Variable | Example |
-|---|---|
-| `DATABASE_URL` | `postgresql://user:pass@<rds-endpoint>:5432/pidklyuch?sslmode=require` (RDS Postgres; never SQLite on AWS) |
-| `JWT_SECRET` | store in Secrets Manager / SSM; a long random string: `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
-| `CORS_ORIGINS` | the HTTPS URL of the frontend, e.g. `https://pidklyuch.example.com` |
+### Step 2: Configure Swap (Recommended on `t3.micro`) & Install Docker
+SSH into the instance and run:
+
+```bash
+sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+
+sudo apt-get update && sudo apt-get install -y ca-certificates curl git
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker $USER
+newgrp docker
+docker compose version
+```
+
+### Step 3: Clone Repo & Configure Production Environment
+Use `<EC2-PUBLIC-IP>.sslip.io` (e.g. `13.60.162.78.sslip.io`) so Caddy v2 automatically issues a valid Let's Encrypt HTTPS certificate without purchasing a custom domain:
+
+```bash
+git clone https://github.com/voskalo/PidKlyuch.git
+cd PidKlyuch
+cp infra/.env.example infra/.env
+```
+
+Generate a strong `JWT_SECRET` and database password:
+
+```bash
+python3 -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+Edit `infra/.env` (never commit `.env` to git):
+
+```dotenv
+DOMAIN=<EC2-PUBLIC-IP>.sslip.io
+ACME_EMAIL=your-email@example.com
+POSTGRES_USER=pidklyuch
+POSTGRES_PASSWORD=<strong-db-password>
+POSTGRES_DB=pidklyuch
+DATABASE_URL=postgresql+psycopg://pidklyuch:<strong-db-password>@db:5432/pidklyuch
+# Or point DATABASE_URL to AWS RDS for PostgreSQL:
+# DATABASE_URL=postgresql+psycopg://user:pass@<rds-endpoint>:5432/pidklyuch?sslmode=require
+JWT_SECRET=<generated-48-byte-secret>
+JWT_EXPIRE_MINUTES=10080
+CORS_ORIGINS=https://<EC2-PUBLIC-IP>.sslip.io
+NBU_API_URL=https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json
+VITE_API_BASE_URL=
+```
+
+### Step 4: Start the Production Stack & Verify HTTPS
+
+```bash
+docker compose --env-file infra/.env -f infra/docker-compose.yml up -d --build
+docker compose --env-file infra/.env -f infra/docker-compose.yml logs -f caddy backend
+```
+
+Verify from your browser or `curl`:
+- `https://<DOMAIN>/healthz` → `OK`
+- `https://<DOMAIN>/api/health` → `{"status":"ok"}`
+- `https://<DOMAIN>/api/docs` → FastAPI interactive Swagger UI
+- `https://<DOMAIN>/` → PidKlyuch React SPA over valid Let's Encrypt HTTPS
+
+### Step 5: Optional Weekly Law-Watcher Check (`cron`)
+Monitor `zakon.rada.gov.ua` source clauses weekly so any legislative change triggers a non-zero exit alert:
+
+```bash
+0 9 * * 1 cd /home/ubuntu/PidKlyuch && docker compose --env-file infra/.env -f infra/docker-compose.yml exec -T backend python scripts/check_law_updates.py
+```
