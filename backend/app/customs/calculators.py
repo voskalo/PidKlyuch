@@ -108,9 +108,13 @@ class CarCalculator(CustomsCalculator):
         cc = data.engine_volume_cc
         rate = r.excise_base[fuel].rate_for(cc)
         litres = Decimal(cc) / Decimal(1000)
-        coef = self.age_coefficient(data.manufacture_year)
+        by_year = self.age_coefficient(data.manufacture_year)
+        # TC 215.3.5-1: "для нових транспортних засобів ... коефіцієнт дорівнює 1", whatever the manufacture year
+        is_new = self.is_new(data)
+        coef = r.age_coef_min if is_new else by_year
+        coef_label = "коеф. віку, нове авто" if is_new and by_year != coef else "коеф. віку"
         amount = money(rate * litres * coef)
-        return amount, f"{rate} € × {litres.normalize():f} л × {coef} (коеф. віку) = {amount} EUR"
+        return amount, f"{rate} € × {litres.normalize():f} л × {coef} ({coef_label}) = {amount} EUR"
 
     def calculate(self, data: CarInput) -> Breakdown:
         r = self.rules

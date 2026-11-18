@@ -63,7 +63,7 @@ def oracle_car(price, ship, engine, cc, kwh, year, origin, is_new) -> dict:
     if engine == "electric":
         excise = c(D(str(kwh)) * 1)
     else:
-        k = max(1, min(15, Y - year - 1))
+        k = 1 if new else max(1, min(15, Y - year - 1))  # TC 215.3.5-1: new car -> 1
         if engine == "diesel":
             base = D(75) if cc <= 3500 else D(150)
         else:

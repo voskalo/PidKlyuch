@@ -181,6 +181,35 @@ def test_duty_rate_depends_on_new_and_engine(engine, cc, year, is_new, rate):
     assert b.line("duty").amount_eur == D("10000") * D(rate) / 100
 
 
+@pytest.mark.parametrize("engine,year,is_new,k,new_label", [
+    (EngineType.DIESEL, 2014, True, 1, True),     # never-used 2014 diesel: K_age = 1, not 11 (TC 215.3.5-1)
+    (EngineType.PETROL, 2020, True, 1, True),     # never-used 2020 petrol, EU or not: K_age = 1
+    (EngineType.HYBRID, 2014, True, 1, True),
+    (EngineType.DIESEL, 2014, None, 11, False),   # not said → by year
+    (EngineType.DIESEL, 2014, False, 11, False),  # said used → by year
+    (EngineType.DIESEL, 2026, False, 1, False),   # used but this year's → 1 anyway (minimum)
+    (EngineType.DIESEL, 2024, True, 1, False),    # new, and by year also 1 → no "нове авто" remark needed
+])
+def test_new_car_age_coefficient_is_1(engine, year, is_new, k, new_label):
+    b = CarCalculator(current_year=2026).calculate(
+        car(engine_type=engine, manufacture_year=year, is_new=is_new, origin=Origin.EU)
+    )
+    base = 75 if engine is EngineType.DIESEL else 50
+    excise = b.line("excise")
+    assert excise.amount_eur == D(base * 2 * k)
+    assert f"× {k} (коеф. віку" in excise.formula
+    assert ("нове авто" in excise.formula) is new_label
+
+
+def test_new_car_k_age_flows_into_vat():
+    b = CarCalculator(current_year=2026).calculate(
+        car(engine_type=EngineType.DIESEL, manufacture_year=2014, is_new=True)
+    )
+    # duty 10% of 10000 = 1000, excise 75 × 2 × 1 = 150, VAT 20% × (10000 + 1000 + 150) = 2230
+    assert [l.amount_eur for l in b.lines] == [D("1000.00"), D("150.00"), D("2230.00")]
+    assert b.taxes_total_eur == D("3380.00")
+
+
 def test_eu_origin_beats_reduced_rate():
     b = CarCalculator(current_year=2026).calculate(
         car(engine_volume_cc=3500, manufacture_year=2026, origin=Origin.EU)
