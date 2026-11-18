@@ -219,6 +219,22 @@ Verify from your browser or `curl`:
 - `https://<DOMAIN>/api/docs` → FastAPI interactive Swagger UI
 - `https://<DOMAIN>/` → PidKlyuch React SPA over valid Let's Encrypt HTTPS
 
+### Automatic deploys (GitHub Actions)
+After the first manual setup above, deploys are automatic:
+
+```bash
+git push origin main:deploy     # release what is on main
+```
+
+Every push to the `deploy` branch runs [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml): backend tests and
+the frontend build, then (only if both pass) it connects to the EC2 server over SSH, fast-forwards the server's
+checkout to `deploy`, runs `docker compose up -d --build`, and checks that the HTTPS site answers. Progress is in the
+repo's **Actions** tab. Every other push and pull request runs only the tests and build.
+
+One-time server setup for this: add the public deploy key [`infra/deploy_key.pub`](infra/deploy_key.pub) to
+`/home/ubuntu/.ssh/authorized_keys` on the server. The connection details are stored as repository secrets
+`EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`, `EC2_KNOWN_HOSTS`.
+
 ### Step 5: Optional Weekly Law-Watcher Check (`cron`)
 Monitor `zakon.rada.gov.ua` source clauses weekly so any legislative change triggers a non-zero exit alert:
 
