@@ -14,7 +14,7 @@ PidKlyuch makes that cost visible before you buy.
 > OOAD course project by Liubomyr Voskalo, Anna Kravchenko, and Anton Vertyporoh.
 
 - **Live demo:** https://16.170.212.120.sslip.io _(API Swagger docs: https://16.170.212.120.sslip.io/api/docs)_
-- **Report:** _TBD (`docs/report.pdf`)_
+- **Report:** [`docs/PidKlyuch-Report.pdf`](docs/PidKlyuch-Report.pdf) (source: [`docs/report.md`](docs/report.md))
 
 ---
 
@@ -89,7 +89,9 @@ backend/    API server, auth, customs calculation engine, database   (Liubomyr)
 frontend/   Web UI                                                  (Anna)
 infra/      Docker, deployment configs, Caddy HTTPS proxy           (Anton)
 docs/       Customs rules spec, user-testing notes, report          (Anton)
+.github/    CI/CD workflow (tests, build, Caddyfile check, auto-deploy)
 AGENTS.md   Shared context and work log for AI agents: read first, update after every task
+CLAUDE.md   Pointer that makes Claude Code load AGENTS.md
 ```
 
 ## How to run

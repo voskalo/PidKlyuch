@@ -1000,6 +1000,15 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **How to verify / run:** Open `docs/PidKlyuch-Report.pdf` (5 pages) and `docs/report.md`.
 - **Not done / known problems / next steps:** None for the report itself.
 
+### 2026-11-18: README fixes after the requirements check (repo organisation)
+- **Who:** Liubomyr Voskalo via Claude Code (Haiku 5.5)
+- **Area:** repo / docs
+- **What was done:** Checked the repo against the criterion "top-level backend/, frontend/, infra/ and a README that explains the product and how to run and deploy it": all four present, README complete. Fixed what was stale in README.md: the report link now points to `docs/PidKlyuch-Report.pdf` (was a `TBD` placeholder for `docs/report.pdf`), and the "Repository structure" block now lists `.github/` and `CLAUDE.md`. Verified without changes: backend tests = 257 passed (matches README); the local files `backend/pidklyuch.db`, `backend/test.db`, `frontend/dist/`, `frontend/node_modules/`, `backend/.venv/`, `.pytest_cache/` and `.env` files are ignored by the `.gitignore` files in `backend/`, `frontend/`, `infra/` and are not tracked, so no root `.gitignore` was needed.
+- **Files touched:** `README.md`, `AGENTS.md`
+- **Decisions & why:** none (only corrected stale text; no code changed).
+- **How to verify / run:** `grep -n "Report:" README.md`; `git check-ignore -v backend/pidklyuch.db frontend/dist`; `cd backend && .venv/bin/pytest -q` (257 passed).
+- **Not done / known problems / next steps:** not committed; the user decides when to commit.
+
 ---
 
 ## 13. Domain notes: Ukrainian customs (RE-VERIFIED 2026-11-18 against the official law texts)
