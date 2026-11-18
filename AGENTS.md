@@ -32,6 +32,8 @@
 3. Check §11 (Open issues / TODO) for anything related to your task.
 4. Find out which team member you are working for. Their area of ownership is in §3. Do **not** rewrite another
    member's area without saying so explicitly in the log, because teammates use different agents and will not know.
+5. Check §14 (Runbooks). If a runbook there is assigned to the member you work for and is not marked DONE, tell them
+   about it at the start of the session and offer to run it.
 
 ### 1.2 While working
 - Follow the conventions in §9.
@@ -415,11 +417,9 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - [x] Fill in "How to run" and "How to deploy" in `README.md` (Anton + Liubomyr + Anna).
 - [x] Create user-testing script, Google Form questions, master tracker (`docs/user-testing-plan.md`), and Ukrainian recruiting templates (`docs/recruiting-messages.md`) (Anton).
 - [x] Merge `anton/infra-and-docs` (PR #3) into `main` (merged 17.11).
-- [ ] **ONE-TIME, to enable auto-deploy (Anton, ~1 min):** on the EC2 server run
-  `echo '<contents of infra/deploy_key.pub>' >> ~/.ssh/authorized_keys` as user `ubuntu`, then on your laptop
-  `git push origin main:deploy` (or re-run the failed "CI/CD" run in the Actions tab). Until then every deploy run
-  fails at the SSH step (harmless: nothing on the server changes). If the repo on the server is not at
-  `/home/ubuntu/PidKlyuch`, set the `EC2_APP_DIR` secret. This deploy also ships the 18.11 backend bug fixes.
+- [ ] **Finish the auto-deploy setup (Anton): run runbook §14.1.** Status on 18.11 09:30: PR #5 merged, `deploy`
+  branch created, secrets set, tests green; the deploy job fails only with `Permission denied (publickey)` because the
+  deploy key is not on the server yet. Finishing it also ships the 18.11 backend bug fixes to the live site.
 - [ ] Schedule `cd backend && python scripts/check_law_updates.py` weekly and alert team on non-zero exit (Anton).
 - [ ] Run Wednesday user-testing sessions (15+ external testers, collect quotes, UX fixes, and donation screenshots) and write `docs/report.pdf` (all, Wed 18 – Thu 19 Nov).
 - [ ] Re-check by hand when the Cabinet sets the start date of the July 2027 parcel VAT (source `law_5025_ix`) (Liubomyr).
@@ -558,6 +558,21 @@ Format: `YYYY-MM-DD: decision: reason (who)`
   (§11, Anton). Not tested end-to-end against the server yet for that reason. If the EC2 IP changes, update
   `EC2_HOST` and `EC2_KNOWN_HOSTS`.
 
+
+### 2026-11-18: Runbook §14.1 for finishing auto-deploy (for Anton's agent)
+- **Who:** Liubomyr Voskalo via Claude Code (Opus 5.5)
+- **Area:** docs / infra
+- **What was done:** Checked the state: PR #5 merged, `deploy` branch = `main` (`4c40c62`), the 4 secrets are set, and
+  the first `CI/CD` run on `deploy` (run 44275118001) passed tests + build but failed at SSH with `Permission denied
+  (publickey)`. The host-key pinning worked; only the deploy key is missing on the server. Added §14 "Runbooks" with
+  14.1: an agent-executable checklist (C1–C8 with check commands, fixes, ASK/HUMAN stop points, troubleshooting,
+  IP-change procedure, safety rules), plus §1.1 step 5 (agents surface open runbooks), and pointed the §11 item at it.
+- **Files touched:** `AGENTS.md` (§1.1, §11, §12, new §14)
+- **Decisions & why:** the instructions live in AGENTS.md (not a PDF or chat message) so Anton's agent finds and
+  executes them itself, checking what is already done first.
+- **How to verify / run:** ask any agent: "run runbook §14.1".
+- **Not done / known problems / next steps:** C5 (deploy key on the server) → C7 → C8, by Anton or his agent.
+
 ---
 
 ## 13. Domain notes: Ukrainian customs (VERIFIED & LOCKED 2026-11-17)
@@ -575,3 +590,148 @@ All numbers live in `backend/app/customs/tax_rates.json` (verified against `zako
 - **Pitch check (€10,000 car):** EU new 0.8L petrol or 40 kWh EV → **€2,048.00**; 2013 non-EU 2.0L petrol ($K_{age}=12$) or 2.0L diesel ($K_{age}=8$) → **€4,640.00** ✔.
 
 **Exchange rates (`backend/app/services/rates_service.py`):** NBU official daily JSON (`EUR`, `USD`, `UAH`, `GBP`, `PLN`), 1h in-memory cache with last-good / static fallback (`rate_source: "fallback"`).
+
+---
+
+## 14. Runbooks (step-by-step procedures for agents)
+
+A runbook is written so that **any agent can execute it**: it checks the real state first, does the safe steps
+itself, and stops to ask its human only where marked **ASK** (a decision) or **HUMAN** (something only a person can
+do: a password, a console click, admin rights). Every step is idempotent: re-running a finished step changes nothing.
+
+### 14.1 Finish GitHub Actions auto-deploy to EC2 — owner: Anton — status: OPEN
+
+**Goal:** a push to the `deploy` branch automatically deploys to https://16.170.212.120.sslip.io (see §9 and
+`.github/workflows/ci-cd.yml`). **Done when** the latest `CI/CD` run on `deploy` is green and the live API runs the
+current `deploy` commit (check C8).
+
+**How the agent must run it:** go through C1–C8 **in order**. For each check, run the command and report
+`✅ done` / `❌ not done` to Anton. If not done, apply the fix (agent does it unless marked ASK/HUMAN), re-run the
+check, and only then continue. Stop at the first step you cannot complete and tell Anton exactly what he must do.
+Finish with a status table of C1–C8, then do "When finished" at the bottom.
+
+**Facts** (verify, don't assume; update this table if something changed):
+
+| Item | Value |
+|---|---|
+| Repo | `voskalo/PidKlyuch` (public), workflow `.github/workflows/ci-cd.yml` (name `CI/CD`) |
+| Server | EC2 `i-00ab50698f9435a50`, `eu-north-1`, AWS account `334177992228`, public IP `16.170.212.120` |
+| SSH (Anton's personal key) | `ssh -i ~/.ssh/pidklyuch-ec2.pem ubuntu@16.170.212.120` |
+| App dir on server | `/home/ubuntu/PidKlyuch` (production secrets in `infra/.env`, git-ignored) |
+| Deploy key (public half) | `infra/deploy_key.pub`, fingerprint **`SHA256:XA4izkTWYZ8tViCdnaUaE+zJfhWh8boH3YhEpeK9w3A`** |
+| GitHub secrets (set 18.11) | `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`, `EC2_KNOWN_HOSTS` (+ optional `EC2_APP_DIR`, `DEPLOY_URL`) |
+
+Shorthand used below: `SSH="ssh -i ~/.ssh/pidklyuch-ec2.pem -o ConnectTimeout=10 ubuntu@16.170.212.120"`.
+
+**C1. Workflow is on `main`, `deploy` branch exists** — status 18.11: ✅
+```bash
+gh api repos/voskalo/PidKlyuch/contents/.github/workflows/ci-cd.yml?ref=main --jq .path
+git ls-remote --heads https://github.com/voskalo/PidKlyuch.git deploy     # must print one line
+```
+Fix: the workflow missing → **HUMAN:** ask Liubomyr to merge PR #5. `deploy` missing → **ASK** Anton, then
+`git push origin origin/main:refs/heads/deploy` (this starts a deploy run).
+
+**C2. Secrets exist** — status 18.11: ✅ (set by Liubomyr)
+```bash
+gh secret list -R voskalo/PidKlyuch      # must list EC2_HOST, EC2_USER, EC2_SSH_KEY, EC2_KNOWN_HOSTS
+```
+A `403`/permission error only means Anton is not a repo admin, which is fine: skip and trust the C7 run log instead.
+If a secret is really missing → **HUMAN:** Liubomyr re-creates it (see §7; the private deploy key exists only in
+GitHub — if `EC2_SSH_KEY` is lost, generate a new pair with `ssh-keygen -t ed25519 -N "" -f /tmp/k`, `gh secret set
+EC2_SSH_KEY < /tmp/k`, replace `infra/deploy_key.pub` with `/tmp/k.pub` in a PR, delete `/tmp/k*`, redo C5).
+
+**C3. Server is reachable with Anton's key**
+```bash
+$SSH 'echo ok; hostname'
+```
+Fix: `Permission denied` → **HUMAN:** Anton must find `~/.ssh/pidklyuch-ec2.pem` (path may differ on his laptop).
+Timeout → the instance is stopped or the IP changed:
+`aws ec2 describe-instances --region eu-north-1 --instance-ids i-00ab50698f9435a50 --query 'Reservations[0].Instances[0].[State.Name,PublicIpAddress]' --output text`
+(use Anton's AWS profile for account `334177992228`). If `stopped` → **ASK** Anton, then
+`aws ec2 start-instances --region eu-north-1 --instance-ids i-00ab50698f9435a50`. If the IP is new → do the
+"IP changed" procedure at the bottom, then continue.
+
+**C4. Server repo is in a deployable state**
+```bash
+$SSH 'cd /home/ubuntu/PidKlyuch && ls -ld . .git && git status --short && git remote get-url origin \
+  && test -f infra/.env && echo ENV_OK; (docker ps >/dev/null 2>&1 && echo DOCKER_OK) || (sudo -n true && echo SUDO_OK)'
+```
+Must show: no lines from `git status --short`, `ENV_OK`, and `DOCKER_OK` or `SUDO_OK`; the origin must be
+`https://github.com/voskalo/PidKlyuch.git`. If `ls -ld` shows the repo is owned by `root`, git as `ubuntu` prints
+"detected dubious ownership". That is fine (the workflow then uses `sudo`); run the git commands as `sudo git ...`.
+Fixes:
+- `cd: No such file` → find it: `$SSH "sudo find / -path '*/infra/docker-compose.yml' 2>/dev/null"`; **HUMAN:**
+  Liubomyr runs `gh secret set EC2_APP_DIR --body <dir> -R voskalo/PidKlyuch`; use that dir below.
+- `git status` shows modified files → show Anton `$SSH 'cd /home/ubuntu/PidKlyuch && git diff'`. If the same change
+  is already on `main`, **ASK** Anton, then `git checkout -- <file>` on the server. Otherwise **ASK** Anton whether
+  to commit the change to the repo via a PR (preferred) or `git stash` it. **Never** run `git reset --hard` or
+  `git clean` on the server.
+- No `ENV_OK` → **STOP, HUMAN:** production secrets are missing; Anton restores `infra/.env` (template:
+  `infra/.env.example`, values from his notes). Never invent or print secret values.
+- Neither `DOCKER_OK` nor `SUDO_OK` → **ASK** Anton, then `$SSH 'sudo usermod -aG docker ubuntu'` (requires sudo with
+  a password: **HUMAN**).
+
+**C5. Deploy key is installed on the server** — status 18.11: ❌ (this is the blocker)
+```bash
+$SSH 'grep -c "github-actions-deploy@PidKlyuch" ~/.ssh/authorized_keys'      # must print 1
+```
+Fix (agent may do it; it only appends one public key):
+```bash
+curl -fsS https://raw.githubusercontent.com/voskalo/PidKlyuch/main/infra/deploy_key.pub -o /tmp/deploy_key.pub
+ssh-keygen -lf /tmp/deploy_key.pub      # MUST show SHA256:XA4izkTWYZ8tViCdnaUaE+zJfhWh8boH3YhEpeK9w3A — else STOP
+$SSH 'cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys' < /tmp/deploy_key.pub
+$SSH 'grep -c "github-actions-deploy@PidKlyuch" ~/.ssh/authorized_keys'      # now 1 (if 2+, remove duplicates)
+```
+Always append (`>>` / `cat >>`); never overwrite `authorized_keys`, or Anton loses access to the server.
+
+**C6. (Optional) Deploy key logs in and can run the deploy commands** — needs the private key, which agents do not
+have; skip. C7 tests it for real.
+
+**C7. Latest deploy run is green**
+```bash
+gh run list -R voskalo/PidKlyuch --workflow ci-cd.yml --branch deploy --limit 1 \
+  --json databaseId,status,conclusion,headSha,url --jq '.[0]'
+```
+If the conclusion is not `success`: re-run it (agent may): `gh run rerun <databaseId> -R voskalo/PidKlyuch`, then wait:
+`gh run watch <databaseId> -R voskalo/PidKlyuch --exit-status` (the first deploy builds images on a t3.micro: 5–10 min).
+If it fails again: `gh run view <databaseId> -R voskalo/PidKlyuch --log-failed | tail -40` and use this table:
+
+| Error in log | Cause → fix |
+|---|---|
+| `Missing repository secrets:` | → C2 |
+| `Permission denied (publickey)` | key not on server / wrong user → C5 |
+| `Host key verification failed` | server replaced or IP changed → "IP changed" procedure |
+| `No git repo at ...` | → C4 (EC2_APP_DIR) |
+| `infra/.env missing on server` | → C4 (STOP, HUMAN) |
+| `would be overwritten` / `Not possible to fast-forward` | server has local edits → C4 |
+| `sudo: a password is required` | → C4 (docker group) |
+| `no space left on device` | **ASK**, then `$SSH 'sudo docker system prune -af'` (20 GB disk), re-run |
+| `Site did not become healthy` | `$SSH 'cd /home/ubuntu/PidKlyuch && sudo docker compose --env-file infra/.env -f infra/docker-compose.yml logs --tail 100 backend caddy'`, report the errors to Anton |
+
+**C8. Live site runs the new code**
+```bash
+curl -s https://16.170.212.120.sslip.io/api/health                     # {"status":"ok"}
+curl -s -X POST https://16.170.212.120.sslip.io/api/calculate -H 'content-type: application/json' \
+  -d '{"delivery_type":"car","car_price":10000,"engine_type":"petrol","engine_volume_cc":0,"manufacture_year":2014}'
+$SSH 'cd /home/ubuntu/PidKlyuch && git rev-parse --short HEAD'; git ls-remote https://github.com/voskalo/PidKlyuch.git deploy
+```
+Done when the 422 error mentions `engine_volume_cc` (not `Input should be 'parcel'`, which is the old backend)
+and the server commit equals the `deploy` branch head.
+
+**"IP changed" procedure** (after an instance stop/start; recommended permanent fix: Elastic IP — **ASK** Anton:
+`aws ec2 allocate-address --region eu-north-1` then `aws ec2 associate-address --region eu-north-1 --instance-id
+i-00ab50698f9435a50 --allocation-id <eipalloc-id>`; release it after the course to stop charges):
+1. **HUMAN (repo admin = Liubomyr):** `gh secret set EC2_HOST --body <new-ip> -R voskalo/PidKlyuch` and
+   `ssh-keyscan <new-ip> | grep -v '^#' | gh secret set EC2_KNOWN_HOSTS -R voskalo/PidKlyuch`.
+2. Agent (**ASK** first): on the server edit `infra/.env` → `DOMAIN=<new-ip>.sslip.io`,
+   `CORS_ORIGINS=https://<new-ip>.sslip.io` (change only these two keys).
+3. Agent: update the live URL in `README.md`, `AGENTS.md` §0, and this runbook's Facts table via a PR.
+4. Re-run C3–C8.
+
+**Rules for this runbook:** never print or paste secret values (`infra/.env`, private keys); never `git reset --hard`,
+`git clean`, or force-push `deploy`; never overwrite `~/.ssh/authorized_keys`; never terminate or modify the EC2
+instance beyond what a step says.
+
+**When finished:** set this runbook's status to `DONE (date, commit)`, tick the §11 item, add a §12 change-log entry
+(who, which checks were already done, what was fixed, final deploy commit and run URL), and tell Anton that from now
+on releasing is `git push origin main:deploy`.
