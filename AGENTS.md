@@ -906,6 +906,9 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **How to verify / run:** `cd backend && .venv/bin/pytest` (250 passed); `.venv/bin/python scripts/check_law_updates.py`
   (25 `[ok]`); `cd frontend && npm run build`; scratch Playwright: UI suite 82/82, mobile audit clean.
 - **Not done / known problems / next steps:** §11 (2027 FTA rates, excise duty by origin, Belarus/Iran).
+- **Deployed 18.11 (late night):** PR #10 merged (`6370012`), deploy run 44359901645 green. Verified live: `/api/car/origins`
+  lists 8 origins with rates; russia dispatch → 422; UAE car → 6.7% (€750.40); the origin/dispatch UI is in the bundle.
+  One more anonymous test calculation saved (4 test calculations from me today in total: subtract them in the report).
 
 ---
 
