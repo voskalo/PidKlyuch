@@ -737,8 +737,13 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **How to verify / run:** `cd backend && .venv/bin/pytest` (164 passed); `.venv/bin/python scripts/check_law_updates.py`
   (11 `[ok]`); `cd frontend && npx tsc -b --noEmit && npm run lint && npm run build` (0 errors, only the 7 old warnings).
 - **Not done / known problems / next steps:** a browser tab left open on the OLD frontend during the deploy gets a 422
-  on sign-up until it reloads (the new backend requires `password_confirm`). Live site gets all this on the next
-  `git push origin main:deploy` after PR #7 is merged.
+  on sign-up until it reloads (the new backend requires `password_confirm`).
+- **Deployed 18.11:** PR #7 merged into `main` (`25256d1`), `git push origin main:deploy`, deploy run 44340546457 green
+  (https://github.com/voskalo/PidKlyuch/actions/runs/44340546457). Verified on https://16.170.212.120.sslip.io:
+  €200 parcel = €16 today / €64 July 2027 (`compare-rules`, not saved), `rates_verified_at` 2026-11-18, sign-up without
+  or with a different `password_confirm` → 422 and no account, new non-EU 3500 cm³ petrol → 5% duty (1 anonymous test
+  calculation saved — subtract it in the report), live bundle has the new UI texts, sign-up form checked in a browser
+  (desktop + phone, no JS errors).
 
 ---
 
