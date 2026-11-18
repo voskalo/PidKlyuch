@@ -249,13 +249,13 @@ All 10 test cases below use a deterministic reference NBU rate fixture so unit t
 
 *(Note: Under July 2027 Laws № 5025-IX / № 5026-IX, parcels `≤ €150` pay 20% VAT on `goods_value_eur` (private P2P gifts `≤ €45` exempt), and parcels `> €150` pay 10% duty and 20% VAT on the **full** value instead of only the excess.)*
 
-| ID | Description | Input (`item_price`, `shipping`, `currency`, `category`) | Current Rules (`duty`, `vat`, `total_tax`, `landed_eur`) | July 2027 Rules (`duty`, `vat`, `total_tax`, `landed_eur`) |
+| ID | Description | Input (`item_price`, `shipping`, `currency`) | Current Rules (`duty`, `vat`, `total_tax`, `landed_eur`) | July 2027 Rules (`duty`, `vat`, `total_tax`, `landed_eur`) |
 |---|---|---|---|---|
-| **TC-P1** | Under €150 threshold | `120.00`, `15.00`, `EUR`, `electronics` | `0.00`, `0.00`, **`0.00`**, `135.00` (`6075.00 UAH`) | `0.00`, `24.00`, **`24.00`**, `159.00` (`7155.00 UAH`) |
-| **TC-P2** | Exact €150 boundary | `150.00`, `10.00`, `EUR`, `clothing` | `0.00`, `0.00`, **`0.00`**, `160.00` (`7200.00 UAH`) | `0.00`, `30.00`, **`30.00`**, `190.00` (`8550.00 UAH`) |
-| **TC-P3** | Pitch benchmark (€200) | `200.00`, `20.00`, `EUR`, `electronics` | `5.00`, `11.00`, **`16.00`**, `236.00` (`10620.00 UAH`) | `20.00`, `44.00`, **`64.00`**, `284.00` (`12780.00 UAH`) |
-| **TC-P4** | USD conversion (`$300` → `€276`) | `300.00`, `25.00`, `USD`, `clothing` | `12.60`, `27.72`, **`40.32`**, `339.32` (`15269.40 UAH`) | `27.60`, `60.72`, **`88.32`**, `387.32` (`17429.40 UAH`) |
-| **TC-P5** | High-value parcel (€1,000) | `1000.00`, `40.00`, `EUR`, `electronics` | `85.00`, `187.00`, **`272.00`**, `1312.00` (`59040.00 UAH`) | `100.00`, `220.00`, **`320.00`**, `1360.00` (`61200.00 UAH`) |
+| **TC-P1** | Under €150 threshold | `120.00`, `15.00`, `EUR` | `0.00`, `0.00`, **`0.00`**, `135.00` (`6075.00 UAH`) | `0.00`, `24.00`, **`24.00`**, `159.00` (`7155.00 UAH`) |
+| **TC-P2** | Exact €150 boundary | `150.00`, `10.00`, `EUR` | `0.00`, `0.00`, **`0.00`**, `160.00` (`7200.00 UAH`) | `0.00`, `30.00`, **`30.00`**, `190.00` (`8550.00 UAH`) |
+| **TC-P3** | Pitch benchmark (€200) | `200.00`, `20.00`, `EUR` | `5.00`, `11.00`, **`16.00`**, `236.00` (`10620.00 UAH`) | `20.00`, `44.00`, **`64.00`**, `284.00` (`12780.00 UAH`) |
+| **TC-P4** | USD conversion (`$300` → `€276`) | `300.00`, `25.00`, `USD` | `12.60`, `27.72`, **`40.32`**, `339.32` (`15269.40 UAH`) | `27.60`, `60.72`, **`88.32`**, `387.32` (`17429.40 UAH`) |
+| **TC-P5** | High-value parcel (€1,000) | `1000.00`, `40.00`, `EUR` | `85.00`, `187.00`, **`272.00`**, `1312.00` (`59040.00 UAH`) | `100.00`, `220.00`, **`320.00`**, `1360.00` (`61200.00 UAH`) |
 
 ### 5.2 Passenger Car Test Cases (`current_year = 2026`, `origin = "other"`)
 
@@ -280,7 +280,7 @@ All 10 test cases below use a deterministic reference NBU rate fixture so unit t
   "parcel_cases": [
     {
       "id": "TC-P1",
-      "input": { "item_price": "120.00", "shipping_cost": "15.00", "currency": "EUR", "category": "electronics", "sender": "marketplace" },
+      "input": { "item_price": "120.00", "shipping_cost": "15.00", "currency": "EUR", "sender": "marketplace" },
       "expected": {
         "item_value_eur": "120.00",
         "shipping_eur": "15.00",
@@ -290,7 +290,7 @@ All 10 test cases below use a deterministic reference NBU rate fixture so unit t
     },
     {
       "id": "TC-P2",
-      "input": { "item_price": "150.00", "shipping_cost": "10.00", "currency": "EUR", "category": "clothing", "sender": "marketplace" },
+      "input": { "item_price": "150.00", "shipping_cost": "10.00", "currency": "EUR", "sender": "marketplace" },
       "expected": {
         "item_value_eur": "150.00",
         "shipping_eur": "10.00",
@@ -300,7 +300,7 @@ All 10 test cases below use a deterministic reference NBU rate fixture so unit t
     },
     {
       "id": "TC-P3",
-      "input": { "item_price": "200.00", "shipping_cost": "20.00", "currency": "EUR", "category": "electronics", "sender": "marketplace" },
+      "input": { "item_price": "200.00", "shipping_cost": "20.00", "currency": "EUR", "sender": "marketplace" },
       "expected": {
         "item_value_eur": "200.00",
         "shipping_eur": "20.00",
@@ -310,7 +310,7 @@ All 10 test cases below use a deterministic reference NBU rate fixture so unit t
     },
     {
       "id": "TC-P4",
-      "input": { "item_price": "300.00", "shipping_cost": "25.00", "currency": "USD", "category": "clothing", "sender": "marketplace" },
+      "input": { "item_price": "300.00", "shipping_cost": "25.00", "currency": "USD", "sender": "marketplace" },
       "expected": {
         "item_value_eur": "276.00",
         "shipping_eur": "23.00",
@@ -320,7 +320,7 @@ All 10 test cases below use a deterministic reference NBU rate fixture so unit t
     },
     {
       "id": "TC-P5",
-      "input": { "item_price": "1000.00", "shipping_cost": "40.00", "currency": "EUR", "category": "electronics", "sender": "marketplace" },
+      "input": { "item_price": "1000.00", "shipping_cost": "40.00", "currency": "EUR", "sender": "marketplace" },
       "expected": {
         "item_value_eur": "1000.00",
         "shipping_eur": "40.00",

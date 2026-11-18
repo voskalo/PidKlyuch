@@ -120,7 +120,7 @@ Submit:
 
 **Demo MVP scope (must have by Wed evening):**
 - Sign up, sign in, sign out.
-- Calculator for **parcels** (category, price, shipping, currency) → itemized duty / VAT / total, with formulas shown.
+- Calculator for **parcels** (price, shipping, currency, sender) → itemized duty / VAT / total, with formulas shown. (No goods category since 18.11: MK 374 p.7 treats all non-excise goods the same.)
 - Calculator for **cars** (price, engine type/volume, year) → duty / excise / VAT / total.
 - "Today's rules vs. July 2027 rules" toggle or side-by-side for parcels.
 - Currency conversion using NBU rates (live, with a cached fallback).
@@ -315,10 +315,11 @@ exactly (case-sensitive, no trimming); otherwise `422` with `detail[].loc[-1] ==
 
 **POST /api/calculate**: body is either a parcel or a car (discriminated by `delivery_type`):
 ```json
-{"delivery_type": "parcel", "category": "electronics", "item_price": 200, "shipping_price": 15,
+{"delivery_type": "parcel", "item_price": 200, "shipping_price": 15,
  "currency": "EUR", "rules": "current", "sender": "marketplace"}
 ```
-- `category`: `electronics | clothing | cosmetics | toys | other`
+- `category` was **removed on 18.11**: customs rules for parcels do not depend on the kind of goods (MK 374 p.7 covers all
+  non-excise goods). Old clients may still send it; it is ignored. Excise goods (alcohol, tobacco) are out of scope.
 - `currency`: `EUR | USD | UAH | GBP | PLN`
 - `rules`: `current | july_2027` (default `current`)
 - `sender`: `marketplace | private` (default `marketplace`; only affects `july_2027`, where `private` $\le €45$ is tax-free)
@@ -776,6 +777,31 @@ Format: `YYYY-MM-DD: decision: reason (who)`
   (11 `[ok]`); `cd frontend && npm run build`; scratch Playwright suite 63/63 (adds: K_age 1 for a new 2014 diesel =
   €150 excise vs €1650 used, checkbox texts, hybrid/EV hints).
 - **Not done / known problems / next steps:** not deployed yet (branch `liubomyr/tax-recheck-2`); range-extender EVs.
+
+
+### 2026-11-18 (evening): Removed the parcel goods category; €45 gift rule re-checked
+- **Who:** Liubomyr Voskalo via Claude Code (Opus 5.5)
+- **Area:** backend + frontend (cross-area: Anna's `ParcelForm.tsx`, `HistoryView.tsx`, `types/api.ts`; Anton's spec)
+- **What was done:**
+  - The category (electronics/clothing/cosmetics/toys/other) never changed any number: MK 374 p.7 taxes all non-excise
+    goods in a parcel the same way. Removed it from `ParcelIn` (old clients' `category` is ignored, test
+    `test_old_clients_category_is_accepted_and_ignored`), `ParcelInput`, `CalculationService`, the parcel form
+    (picker deleted, steps renumbered), `types/api.ts`, the history list, README, §4, §8 and the spec fixtures
+    (`docs/customs-rules.md` §5.1/§5.3). The form now says "Будь-які товари рахуються однаково (ст. 374 МКУ), крім
+    підакцизних — алкоголю, тютюну, рідин для е-сигарет"; the July 2027 rule set got the same excise note as today's.
+  - €45 gift rule: confirmed in Law 5025-IX, section I item 9 (new TC 197.30): VAT-free if ≤ €45, non-excise, one
+    private sender → one private recipient, one parcel, sent **without payment**, for personal needs. It is in items
+    6–9 that start 45 days after the Cabinet decision, not before 01.07.2027, so it is NOT valid today (today every
+    parcel ≤ €150 is tax-free anyway). The engine already applies it only under `july_2027`; the "Приватна особа"
+    button now says "Подарунок (з 2027: до €45)".
+- **Files touched:** `backend/app/{api/schemas_calc.py,customs/models.py,customs/tax_rates.json,services/calculation_service.py}`,
+  `backend/tests/{test_calculate_api.py,test_law_oracle.py}`, `frontend/src/{types/api.ts,components/ParcelForm.tsx,
+  components/HistoryView.tsx}`, `docs/customs-rules.md`, `README.md`, `AGENTS.md`.
+- **Decisions & why:** keep accepting (and ignoring) `category` instead of rejecting it, so old browser tabs and
+  saved history keep working.
+- **How to verify / run:** `cd backend && .venv/bin/pytest` (173 passed); `cd frontend && npm run build`; scratch
+  Playwright suite 65/65.
+- **Not done / known problems / next steps:** not deployed yet (branch `liubomyr/tax-recheck-2`).
 
 ---
 
