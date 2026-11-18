@@ -44,6 +44,7 @@ class CarInput:
     origin: Origin
     engine_volume_cc: int | None = None
     battery_kwh: Decimal | None = None
+    is_new: bool | None = None  # never used before (Customs Tariff "нові"); None = derive from manufacture_year
 
 
 @dataclass(frozen=True)

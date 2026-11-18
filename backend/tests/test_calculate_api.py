@@ -30,6 +30,16 @@ def test_calculate_car(client):
     assert [l["code"] for l in r.json()["lines"]] == ["duty", "excise", "vat"]
 
 
+def test_car_is_new_field(client):
+    big = {**CAR, "engine_volume_cc": 3500, "manufacture_year": 2024}
+    used = client.post("/api/calculate", json=big).json()
+    new = client.post("/api/calculate", json={**big, "is_new": True}).json()
+    duty = lambda b: next(l for l in b["lines"] if l["code"] == "duty")
+    assert duty(used)["amount_eur"] == "1000.00"
+    assert duty(new)["amount_eur"] == "500.00"
+    assert "нове бензинове авто понад 3000 см³" in duty(new)["formula"]
+
+
 def test_car_validation(client):
     bad = {**CAR, "engine_volume_cc": None}
     assert client.post("/api/calculate", json=bad).status_code == 422
@@ -56,5 +66,5 @@ def test_compare_rules(client):
 
 def test_response_says_which_rates_were_used(client):
     b = client.post("/api/calculate", json=PARCEL).json()
-    assert b["rates_verified_at"] == "2026-11-16"
+    assert b["rates_verified_at"] == "2026-11-18"
     assert b["rates_version"]
