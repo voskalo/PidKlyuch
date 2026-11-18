@@ -1,0 +1,135 @@
+# CI/CD for PidKlyuch
+#  - Every push / pull request: backend tests + frontend build.
+#  - Push to the `deploy` branch: same checks, then deploy to the AWS EC2 server over SSH
+#    (git fast-forward + docker compose up --build) and verify the live site.
+#
+# Required repository secrets (Settings -> Secrets and variables -> Actions):
+#   EC2_HOST         public IP of the EC2 instance, e.g. 16.170.212.120
+#   EC2_USER         SSH user, e.g. ubuntu
+#   EC2_SSH_KEY      private key of the dedicated deploy key (its public key is in the server's
+#                    ~/.ssh/authorized_keys)
+# Optional:
+#   EC2_KNOWN_HOSTS  output of `ssh-keyscan <EC2_HOST>` captured once, to pin the server's host key
+#   DEPLOY_URL       public HTTPS URL to verify after deploy (default: https://<EC2_HOST>.sslip.io)
+#   EC2_APP_DIR      repo path on the server (default: /home/ubuntu/PidKlyuch)
+
+name: CI/CD
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - run: pip install -r requirements-dev.txt
+      - run: pytest -q
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/deploy'
+    needs: [backend-tests, frontend-build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    env:
+      EC2_HOST: ${{ secrets.EC2_HOST }}
+      EC2_USER: ${{ secrets.EC2_USER }}
+      APP_DIR: ${{ secrets.EC2_APP_DIR || '/home/ubuntu/PidKlyuch' }}
+      DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
+    steps:
+      - name: Check secrets are configured
+        run: |
+          missing=""
+          [ -n "$EC2_HOST" ] || missing="$missing EC2_HOST"
+          [ -n "$EC2_USER" ] || missing="$missing EC2_USER"
+          [ -n "${{ secrets.EC2_SSH_KEY }}" ] || missing="$missing EC2_SSH_KEY"
+          if [ -n "$missing" ]; then echo "::error::Missing repository secrets:$missing"; exit 1; fi
+
+      - name: Set up SSH
+        env:
+          SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          if [ -n "$KNOWN_HOSTS" ]; then
+            printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            echo "::warning::EC2_KNOWN_HOSTS not set; trusting the host key seen now (set it to pin the key)."
+            ssh-keyscan -T 15 "$EC2_HOST" > ~/.ssh/known_hosts
+          fi
+
+      - name: Deploy on EC2 (fast-forward + docker compose)
+        run: |
+          ssh -i ~/.ssh/deploy_key -o ConnectTimeout=20 -o ServerAliveInterval=30 \
+            "$EC2_USER@$EC2_HOST" "APP_DIR='$APP_DIR' SHA='${{ github.sha }}' bash -s" <<'REMOTE'
+          set -euo pipefail
+          [ -d "$APP_DIR/.git" ] || { echo "No git repo at $APP_DIR: set the EC2_APP_DIR secret"; exit 1; }
+          cd "$APP_DIR"
+          test -f infra/.env || { echo "infra/.env missing on server: refusing to deploy"; exit 1; }
+          # The repo may have been cloned by root (EC2 user-data). Use sudo only if needed.
+          SUDO=""
+          if ! { [ -w .git ] && docker info >/dev/null 2>&1; }; then SUDO="sudo -n"; echo "using sudo"; fi
+          $SUDO git fetch --prune origin deploy
+          # Switch to / update the deploy branch WITHOUT discarding server-side edits:
+          # checkout and --ff-only both refuse (and stop the deploy) instead of overwriting local changes.
+          if $SUDO git rev-parse --verify -q refs/heads/deploy >/dev/null; then
+            $SUDO git checkout deploy
+          else
+            $SUDO git checkout -b deploy --track origin/deploy
+          fi
+          $SUDO git merge --ff-only origin/deploy
+          echo "Server now at $($SUDO git rev-parse --short HEAD) (expected ${SHA:0:7})"
+          [ "$($SUDO git rev-parse HEAD)" = "$SHA" ] || echo "note: deploy branch moved since this run started"
+          $SUDO docker compose --env-file infra/.env -f infra/docker-compose.yml up -d --build
+          $SUDO docker image prune -f >/dev/null
+          $SUDO docker compose --env-file infra/.env -f infra/docker-compose.yml ps
+          REMOTE
+
+      - name: Verify the live site
+        run: |
+          url="${DEPLOY_URL:-https://$EC2_HOST.sslip.io}"
+          for i in $(seq 1 30); do
+            api=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url/api/health" || true)
+            web=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url/" || true)
+            echo "attempt $i: /api/health=$api /=$web"
+            if [ "$api" = 200 ] && [ "$web" = 200 ]; then echo "Live: $url"; exit 0; fi
+            sleep 10
+          done
+          echo "::error::Site did not become healthy at $url"; exit 1
+
+      - name: Remove SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

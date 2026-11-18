@@ -148,7 +148,8 @@ Update the Status column above when a criterion is met.
 | Secrets | `.env` locally / AWS Secrets Manager or SSM on EC2 | `JWT_SECRET`, `POSTGRES_PASSWORD` never committed to git |
 | Logs | Docker Compose stdout / **CloudWatch Logs** | Uvicorn + Python `logging` + Caddy access logs |
 | Infra as code | `infra/` (Docker Compose, multi-stage Dockerfiles, Caddyfile) | Includes `--profile fallback` (`hello:80`) and full-stack setup |
-| CI / Automation | `backend/scripts/check_law_updates.py` + `pytest` | Weekly law-watcher cron verifying `zakon.rada.gov.ua` fingerprints against `tax_rates.json` |
+| CI / CD | **GitHub Actions** `.github/workflows/ci-cd.yml` | every push/PR: `pytest` + `npm run build`; push to `deploy` → SSH deploy to EC2 + HTTPS health check (see §9) |
+| Automation | `backend/scripts/check_law_updates.py` | Weekly law-watcher cron verifying `zakon.rada.gov.ua` fingerprints against `tax_rates.json` |
 
 **AWS implications for the backend (already handled or to keep in mind):**
 - **Do not use SQLite in prod.** Container filesystems are ephemeral; `DATABASE_URL` points to PostgreSQL (`db` or RDS).
@@ -198,7 +199,9 @@ PidKlyuch/
 │       ├── services/api.ts    # Fetch API wrapper with JWT Bearer auth & VITE_API_BASE_URL
 │       ├── context/AuthContext.tsx # React AuthProvider (user state, login/signup/logout, token storage)
 │       └── components/        # Navbar, RatesBar, ParcelForm, CarForm, BreakdownView, CompareRulesModal, HistoryView, AuthModal, DonationModal, StatsModal, Footer
+├── .github/workflows/ci-cd.yml # CI on every push/PR (backend pytest + frontend build); push to `deploy` → auto-deploy to EC2
 ├── infra/                     # Docker, deployment configs, Caddy HTTPS proxy (owner: Anton)
+│   ├── deploy_key.pub         # PUBLIC half of the GitHub Actions deploy key (goes into the server's authorized_keys)
 │   ├── hello-world/index.html # Fallback static status/landing page for HTTPS smoke test
 │   ├── .env.example           # Full-stack Compose, DB, Caddy, backend & frontend env var template
 │   ├── .gitignore             # Ignores infra/.env and *.env.local
@@ -241,6 +244,14 @@ Format: `NAME`: where it is used, example value (never a real secret), required 
 - `NBU_API_URL`: backend, NBU exchange-rate endpoint, default `https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json`. Optional.
 - `PASSWORD_HASH_ITERATIONS`: backend, PBKDF2 iterations, default `390000` (lowered only in tests). Optional.
 - `TAX_RATES_PATH`: backend, optional override path for `tax_rates.json` (default `app/customs/tax_rates.json`). Optional.
+
+### GitHub Actions secrets (repo Settings → Secrets → Actions; used by `.github/workflows/ci-cd.yml`)
+- `EC2_HOST` (`16.170.212.120`), `EC2_USER` (`ubuntu`): the SSH target. **Set 18.11.** Update `EC2_HOST` if the server IP changes.
+- `EC2_SSH_KEY`: private half of a dedicated ed25519 deploy key (the public half is `infra/deploy_key.pub`). **Set 18.11.**
+  The private key exists ONLY in GitHub secrets; to rotate, generate a new pair, `gh secret set EC2_SSH_KEY < key`, and
+  replace the line in the server's `~/.ssh/authorized_keys`.
+- `EC2_KNOWN_HOSTS`: pinned SSH host keys of the server (`ssh-keyscan 16.170.212.120`). **Set 18.11.** Re-set if the server is replaced.
+- Optional: `EC2_APP_DIR` (default `/home/ubuntu/PidKlyuch`), `DEPLOY_URL` (default `https://<EC2_HOST>.sslip.io`).
 
 ### Frontend (`frontend/src/services/api.ts`, `infra/frontend.Dockerfile`)
 - `VITE_API_BASE_URL`: frontend build-time env var, backend base URL (`https://api.pidklyuch.example.com` if hosted on a separate origin; leave empty `""` when behind Caddy on the same HTTPS origin because `api.ts` already prefixes `/api/...`). Optional locally (defaults to `""` with Vite `/api` proxy).
@@ -346,6 +357,11 @@ unknown `delivery_type` gives `detail[0].type == "union_tag_invalid"`. Prices ac
 
 - **Git:** short-lived branches `name/feature` (e.g. `anna/calculator-ui`), merge to `main` via PR or after a quick
   review in chat. Do not force-push `main`.
+- **Deploying = updating the `deploy` branch.** Every push to `deploy` runs `.github/workflows/ci-cd.yml`: backend tests +
+  frontend build, then (only if green) SSH to EC2 → `git merge --ff-only origin/deploy` → `docker compose up -d --build`
+  → checks `/api/health` and `/` over HTTPS. To release what is on `main`:
+  `git push origin main:deploy` (fast-forward; never force-push `deploy`). Watch it in the repo's **Actions** tab.
+  Do not edit tracked files directly on the server: the fast-forward then refuses and the deploy stops (by design).
 - **Commits:** imperative, short (`Add parcel duty calculation`). If an AI wrote the commit, it may add its own
   co-author line.
 - **Secrets:** never in git. Use `.env` + `.env.example`.
@@ -381,6 +397,12 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - 2026-11-18: Form input UX polish: replaced default OS `<select>` dropdown styling with `appearance-none`, custom `ChevronDown`, `shrink-0 min-w-[76px]` and added `min-w-0` to flex inputs across `ParcelForm.tsx` and `CarForm.tsx` so currencies (EUR, USD, PLN, GBP, UAH) and units (см³, кВт⋅год, рік) fit cleanly without text truncation. (Anna + Gemini)
 - 2026-11-18: Added quick currency switcher pills (`[EUR] [USD] [UAH] [PLN] [GBP]`) and currency symbols (`€ EUR`, `$ USD`, etc.) in price inputs, and replaced static tooltip on "Хто відправник" with an interactive expandable explanation card for July 2027 rules (Law 5025-IX / 5026-IX). (Anna + Gemini)
 
+- 2026-11-18: **Auto-deploy via GitHub Actions on push to the `deploy` branch** (SSH to EC2 + docker compose), not on push
+  to `main`. Reason: the team merges to `main` many times a day; a separate `deploy` branch makes releases deliberate,
+  and every deploy is gated by the same tests as CI. Plain `ssh` (no third-party SSH action), a dedicated revocable
+  deploy key, a pinned host key, and fast-forward-only updates on the server (never `reset --hard`, never touches
+  `infra/.env`). Alternative considered: GitHub OIDC → IAM role → SSM Run Command (no SSH key) — better long-term,
+  but needs IAM setup in Anton's AWS account; not worth it the day before the demo. (Liubomyr + Claude Code)
 ---
 
 ## 11. Open issues / TODO
@@ -393,8 +415,11 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - [x] Fill in "How to run" and "How to deploy" in `README.md` (Anton + Liubomyr + Anna).
 - [x] Create user-testing script, Google Form questions, master tracker (`docs/user-testing-plan.md`), and Ukrainian recruiting templates (`docs/recruiting-messages.md`) (Anton).
 - [x] Merge `anton/infra-and-docs` (PR #3) into `main` (merged 17.11).
-- [ ] **Redeploy the live site from `main` after the edge-case fixes are merged (18.11)**, so production gets the
-  3 backend bug fixes (car 422 messages, 401 on an invalid token for `/api/calculate`, 409 on a sign-up race) (Anton).
+- [ ] **ONE-TIME, to enable auto-deploy (Anton, ~1 min):** on the EC2 server run
+  `echo '<contents of infra/deploy_key.pub>' >> ~/.ssh/authorized_keys` as user `ubuntu`, then on your laptop
+  `git push origin main:deploy` (or re-run the failed "CI/CD" run in the Actions tab). Until then every deploy run
+  fails at the SSH step (harmless: nothing on the server changes). If the repo on the server is not at
+  `/home/ubuntu/PidKlyuch`, set the `EC2_APP_DIR` secret. This deploy also ships the 18.11 backend bug fixes.
 - [ ] Schedule `cd backend && python scripts/check_law_updates.py` weekly and alert team on non-zero exit (Anton).
 - [ ] Run Wednesday user-testing sessions (15+ external testers, collect quotes, UX fixes, and donation screenshots) and write `docs/report.pdf` (all, Wed 18 – Thu 19 Nov).
 - [ ] Re-check by hand when the Cabinet sets the start date of the July 2027 parcel VAT (source `law_5025_ix`) (Liubomyr).
@@ -509,6 +534,29 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **Decisions & why:** One-click currency pills provide the fastest UX for switching currencies without even opening a dropdown, and interactive in-place explainer eliminates mobile tooltip failure.
 - **How to verify / run:** `cd frontend && npm run build` (builds in ~680ms with 0 errors); open `http://localhost:5173`, click the quick currency pills and click the `?` icon next to "Хто відправник" to see the explanation card.
 - **Not done / known problems / next steps:** None; ready for user testing.
+
+
+### 2026-11-18: GitHub Actions CI/CD with auto-deploy from the `deploy` branch
+- **Who:** Liubomyr Voskalo via Claude Code (Opus 5.5)
+- **Area:** infra / repo
+- **What was done:** Added `.github/workflows/ci-cd.yml` (there was no CI before):
+  jobs `backend-tests` (Python 3.12, `pytest`), `frontend-build` (Node 22, `npm ci && npm run build`) on every
+  push/PR, and `deploy` (only on push to `deploy`, after both pass): SSH to `ubuntu@16.170.212.120` →
+  `cd /home/ubuntu/PidKlyuch` → fetch + `git checkout deploy` + `git merge --ff-only origin/deploy` →
+  `docker compose --env-file infra/.env -f infra/docker-compose.yml up -d --build` → `docker image prune -f` →
+  polls `https://<EC2_HOST>.sslip.io/api/health` and `/` until 200 (5 min max). Uses `sudo -n` automatically if the repo is
+  root-owned (EC2 user-data clone). Refuses to deploy if `infra/.env` is missing. Generated a dedicated ed25519 deploy
+  key: the private half was stored ONLY as GitHub secret `EC2_SSH_KEY` and deleted locally; the public half is
+  `infra/deploy_key.pub`. Set the secrets `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`, `EC2_KNOWN_HOSTS` (pinned via `ssh-keyscan`).
+  Created the `deploy` branch from `main`.
+- **Files touched:** created `.github/workflows/ci-cd.yml`, `infra/deploy_key.pub`; modified `AGENTS.md` (§5, §6, §7,
+  §9, §10, §11, §12), `README.md` (How to deploy → automatic deploys).
+- **Decisions & why:** see §10 (deploy branch, plain ssh, fast-forward only).
+- **How to verify / run:** repo → Actions tab → "CI/CD". After Anton adds the key: `git push origin main:deploy`, then
+  watch the `deploy` job turn green and `curl https://16.170.212.120.sslip.io/api/health`.
+- **Not done / known problems / next steps:** the deploy job cannot log in until the public key is added to the server
+  (§11, Anton). Not tested end-to-end against the server yet for that reason. If the EC2 IP changes, update
+  `EC2_HOST` and `EC2_KNOWN_HOSTS`.
 
 ---
 
