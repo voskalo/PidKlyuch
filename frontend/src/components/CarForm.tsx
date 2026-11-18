@@ -31,7 +31,13 @@ const ENGINE_TYPES: { id: EngineType; label: string; icon: React.ElementType }[]
   { id: 'electric', label: 'Електро', icon: Zap },
 ];
 
-const CURRENCIES: Currency[] = ['EUR', 'USD', 'UAH', 'PLN', 'GBP'];
+const CURRENCY_OPTIONS: { code: Currency; symbol: string; label: string }[] = [
+  { code: 'EUR', symbol: '€', label: '€ EUR' },
+  { code: 'USD', symbol: '$', label: '$ USD' },
+  { code: 'UAH', symbol: '₴', label: '₴ UAH' },
+  { code: 'PLN', symbol: 'zł', label: 'zł PLN' },
+  { code: 'GBP', symbol: '£', label: '£ GBP' },
+];
 
 export const CarForm: React.FC<CarFormProps> = ({ onCalculated, onError }) => {
   const [carPrice, setCarPrice] = useState<string>('10000');
@@ -143,13 +149,28 @@ export const CarForm: React.FC<CarFormProps> = ({ onCalculated, onError }) => {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Car price */}
         <div>
-          <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
             <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
               2. Вартість автомобіля *
             </label>
-            <span className="text-[11px] text-slate-400">ціна купівлі</span>
+            <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+              {CURRENCY_OPTIONS.map((c) => (
+                <button
+                  key={c.code}
+                  type="button"
+                  onClick={() => setCurrency(c.code)}
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all ${
+                    currency === c.code
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                  }`}
+                >
+                  {c.code}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="flex rounded-xl shadow-sm border border-slate-200 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/30 focus-within:border-blue-500">
+          <div className="flex rounded-xl shadow-sm border border-slate-300 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/30 focus-within:border-blue-500">
             <input
               type="number"
               step="any"
@@ -158,22 +179,22 @@ export const CarForm: React.FC<CarFormProps> = ({ onCalculated, onError }) => {
               value={carPrice}
               onChange={(e) => setCarPrice(e.target.value)}
               placeholder="10000"
-              className="flex-1 min-w-0 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:outline-none"
+              className="flex-1 min-w-0 px-3.5 py-2.5 text-base font-bold text-slate-900 focus:outline-none"
             />
-            <div className="relative shrink-0 border-l border-slate-200 bg-slate-50 min-w-[76px]">
+            <div className="relative shrink-0 border-l border-slate-200 bg-slate-100/90 min-w-[88px]">
               <select
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value as Currency)}
                 aria-label="Валюта вартості автомобіля"
-                className="w-full h-full appearance-none bg-transparent pl-3 pr-7 py-2.5 text-xs font-bold text-slate-700 focus:outline-none cursor-pointer hover:bg-slate-100 transition-colors"
+                className="w-full h-full appearance-none bg-transparent pl-3 pr-7 py-2.5 text-xs font-black text-slate-900 focus:outline-none cursor-pointer hover:bg-slate-200/70 transition-colors"
               >
-                {CURRENCIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
+                {CURRENCY_OPTIONS.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.label}
                   </option>
                 ))}
               </select>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <ChevronDown className="w-4 h-4 text-slate-600 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
           </div>
         </div>
@@ -186,7 +207,7 @@ export const CarForm: React.FC<CarFormProps> = ({ onCalculated, onError }) => {
             </label>
             <span className="text-[11px] text-slate-400">входить у митну вартість</span>
           </div>
-          <div className="flex rounded-xl shadow-sm border border-slate-200 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/30 focus-within:border-blue-500">
+          <div className="flex rounded-xl shadow-sm border border-slate-300 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/30 focus-within:border-blue-500">
             <input
               type="number"
               step="any"
@@ -194,10 +215,10 @@ export const CarForm: React.FC<CarFormProps> = ({ onCalculated, onError }) => {
               value={shippingPrice}
               onChange={(e) => setShippingPrice(e.target.value)}
               placeholder="1200"
-              className="flex-1 min-w-0 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:outline-none"
+              className="flex-1 min-w-0 px-3.5 py-2.5 text-base font-bold text-slate-900 focus:outline-none"
             />
-            <div className="shrink-0 min-w-[76px] bg-slate-50 text-slate-600 text-xs font-bold px-3 py-2.5 flex items-center justify-center border-l border-slate-200 select-none">
-              {currency}
+            <div className="shrink-0 min-w-[88px] bg-slate-100/90 text-slate-900 text-xs font-black px-3 py-2.5 flex items-center justify-center border-l border-slate-200 select-none">
+              {CURRENCY_OPTIONS.find((c) => c.code === currency)?.label || currency}
             </div>
           </div>
         </div>

@@ -379,6 +379,7 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - 2026-11-17: Frontend stack = React 19 + TypeScript + Vite 8 + Tailwind CSS v4 + Lucide Icons, with dev proxy `/api` → `http://127.0.0.1:8000` and dedicated volunteer donation modal («Повернись живим», Фонд Сергія Притули, Monobank). (Anna + Gemini)
 - 2026-11-17: Host full-stack deployment on AWS EC2 (Ubuntu 24.04) using Docker Compose (`db` Postgres 16, `backend`, `frontend` built on Node 22 with empty `VITE_API_BASE_URL` for same-origin proxy, `caddy` v2) and `<EC2-IP>.sslip.io` for zero-DNS-purchase automatic Let's Encrypt HTTPS, eliminating CORS friction. (Anton + Antigravity CLI)
 - 2026-11-18: Form input UX polish: replaced default OS `<select>` dropdown styling with `appearance-none`, custom `ChevronDown`, `shrink-0 min-w-[76px]` and added `min-w-0` to flex inputs across `ParcelForm.tsx` and `CarForm.tsx` so currencies (EUR, USD, PLN, GBP, UAH) and units (см³, кВт⋅год, рік) fit cleanly without text truncation. (Anna + Gemini)
+- 2026-11-18: Added quick currency switcher pills (`[EUR] [USD] [UAH] [PLN] [GBP]`) and currency symbols (`€ EUR`, `$ USD`, etc.) in price inputs, and replaced static tooltip on "Хто відправник" with an interactive expandable explanation card for July 2027 rules (Law 5025-IX / 5026-IX). (Anna + Gemini)
 
 ---
 
@@ -497,6 +498,17 @@ Format: `YYYY-MM-DD: decision: reason (who)`
 - **Decisions & why:** `appearance-none` removes unpredictable OS-native dropdown arrows that steal horizontal padding, while `shrink-0 min-w-[76px]` ensures 3-letter currency codes (EUR, USD, UAH, PLN, GBP) have dedicated comfortable spacing.
 - **How to verify / run:** `cd frontend && npm run build` (0 errors); run `npm run dev` and inspect parcel/car forms: currencies and units fit with ample breathing room.
 - **Not done / known problems / next steps:** None; ready for user testing sessions.
+
+### 2026-11-18 11:10: High-visibility currency picker & interactive sender explanation popup
+- **Who:** Anna Kravchenko via Antigravity (Gemini 3.8 Flash)
+- **Area:** frontend
+- **What was done:**
+  1. **Enhanced Currency Visibility:** Added prominent one-click currency toggle chips (`EUR`, `USD`, `UAH`, `PLN`, `GBP`) directly in the field header above the price input in `ParcelForm.tsx` and `CarForm.tsx`. Upgraded dropdown options and badge displays to explicitly show currency symbols with bold text (`€ EUR`, `$ USD`, `₴ UAH`, `zł PLN`, `£ GBP`) on high-contrast backgrounds, ensuring the currency is immediately clear when entering prices.
+  2. **Interactive Sender Explanation:** Replaced static HTML `title` tooltip on "Хто відправник" with an interactive button (`HelpCircle` icon + "Що це означає?" toggle) that opens an animated, accessible explainer card directly on mobile & desktop explaining why the sender type matters under Law № 5025-IX / 5026-IX (non-commercial gift up to €45 exempt from July 2027 vs marketplace parcels paying 20% VAT).
+- **Files touched:** `frontend/src/components/ParcelForm.tsx`, `frontend/src/components/CarForm.tsx`, `AGENTS.md`
+- **Decisions & why:** One-click currency pills provide the fastest UX for switching currencies without even opening a dropdown, and interactive in-place explainer eliminates mobile tooltip failure.
+- **How to verify / run:** `cd frontend && npm run build` (builds in ~680ms with 0 errors); open `http://localhost:5173`, click the quick currency pills and click the `?` icon next to "Хто відправник" to see the explanation card.
+- **Not done / known problems / next steps:** None; ready for user testing.
 
 ---
 
